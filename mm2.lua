@@ -5574,15 +5574,15 @@ _G.__StyleSquareButton = function(parent, arg, text, backgroundColor3)
 	uiGradient.Rotation = 90
 	local colorSequence = ColorSequence.new
 	local tbl5 = {}
-	local v6 = ColorSequenceKeypoint.new(0, backgroundColor3:Lerp(Color3.fromRGB(24, 26, 34), 0.72))
-	local v7 = ColorSequenceKeypoint.new(0.55, Color3.fromRGB(20, 22, 29))
+	local v6 = ColorSequenceKeypoint.new(0, backgroundColor3:Lerp(Color3.fromRGB(21, 33, 59), 0.72))
+	local v7 = ColorSequenceKeypoint.new(0.55, Color3.fromRGB(16, 26, 48))
 	local new = ColorSequenceKeypoint.new
 	local color = Color3.fromRGB
 	tbl5[1] = v6
 	tbl5[2] = v7
 
 	do
-		local values = table.pack(new(1, color(12, 13, 18)))
+		local values = table.pack(new(1, color(8, 15, 31)))
 		table.move(values, 1, values.n, 3, tbl5)
 	end
 
@@ -5595,6 +5595,14 @@ _G.__StyleSquareButton = function(parent, arg, text, backgroundColor3)
 	uiStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
 	uiStroke.LineJoinMode = Enum.LineJoinMode.Round
 	uiStroke.Parent = frame
+
+	local glowStroke = Instance.new("UIStroke")
+	glowStroke.Color = Color3.fromRGB(255, 255, 255)
+	glowStroke.Thickness = 4
+	glowStroke.Transparency = 0.9
+	glowStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+	glowStroke.LineJoinMode = Enum.LineJoinMode.Round
+	glowStroke.Parent = frame
 	local uiGradient2 = Instance.new("UIGradient")
 	uiGradient2.Rotation = 90
 	local color2 = Color3.fromRGB
@@ -10707,29 +10715,33 @@ local function fn12()
 	local color2 = Color3.new(1, 1, 1)
 
 	local tbl6 = {
-		ink = color(12, 12, 14),
-		inkRaised = color(22, 22, 26),
-		inkLine = color(34, 34, 39),
-		inkText = color(244, 244, 246),
-		inkSub = color(138, 138, 146),
-		inkDim = color(90, 90, 98),
-		side = color(15, 15, 18),
-		page = color(9, 9, 11),
-		pageTop = color(13, 13, 16),
-		pageBottom = color(6, 6, 8),
-		card = color(17, 17, 20),
-		cardLine = color(33, 33, 38),
-		divider = color(26, 26, 30),
-		field = color(24, 24, 28),
-		hover = color(23, 23, 27),
-		track = color(44, 44, 51),
-		text = color(243, 243, 245),
-		sub = color(142, 142, 151),
-		dim = color(92, 92, 100),
-		accent = color2,
-		danger = color(239, 68, 68),
-		tile = color(24, 24, 29),
+		ink = color(8, 15, 31),           -- #080F1F main background
+		inkRaised = color(13, 21, 48),    -- #0D1530 sidebar
+		inkLine = color(49, 90, 145),     -- #315A91 blue border
+		inkText = color(255, 255, 255),   -- #FFFFFF primary text
+		inkSub = color(184, 199, 221),    -- #B8C7DD secondary text
+		inkDim = color(129, 148, 178),    -- #8194B2 muted text
+		side = color(13, 21, 48),         -- #0D1530 sidebar background
+		page = color(8, 15, 31),          -- #080F1F main background
+		pageTop = color(16, 26, 48),      -- #101A30 secondary background
+		pageBottom = color(8, 15, 31),    -- #080F1F main background
+		card = color(21, 33, 59),         -- #15213B panel background
+		cardLine = color(49, 90, 145),    -- #315A91 blue border
+		divider = color(27, 45, 74),      -- #1B2D4A elevated panel
+		field = color(16, 26, 48),        -- #101A30 secondary background
+		hover = color(27, 45, 74),        -- #1B2D4A elevated panel
+		track = color(49, 90, 145),       -- #315A91 blue border
+		text = color(255, 255, 255),      -- #FFFFFF primary text
+		sub = color(184, 199, 221),       -- #B8C7DD secondary text
+		dim = color(129, 148, 178),       -- #8194B2 muted text
+		accent = color(59, 130, 246),     -- #3B82F6 primary blue
+		danger = color(239, 68, 68),      -- #EF4444 keep danger red
+		tile = color(27, 45, 74),         -- #1B2D4A elevated panel
 	}
+
+	local accentBright = color(96, 165, 250)   -- #60A5FA bright blue accent
+	local glowWhite = color(255, 255, 255)     -- white glow tone
+	local accentMid = color(59, 130, 246)      -- #3B82F6 primary blue
 
 	local fontWeight = Enum.FontWeight
 
@@ -10744,8 +10756,8 @@ local function fn12()
 		Theme = {
 			Text = tbl6.text,
 			Placeholder = tbl6.sub,
-			Primary = tbl6.accent,
-			Icon = tbl6.sub,
+			Primary = accentBright,
+			Icon = tbl6.inkSub,
 			ElementBackground = tbl6.field,
 			Button = tbl6.cardLine,
 			Outline = tbl6.cardLine,
@@ -10753,7 +10765,7 @@ local function fn12()
 			Accent = tbl6.card,
 			Dialog = tbl6.card,
 			ToggleBar = color2,
-			Toggle = tbl6.accent,
+			Toggle = accentBright,
 			Tile = tbl6.tile,
 		},
 		Icon = function(arg)
@@ -11294,7 +11306,7 @@ local function fn12()
 		})
 
 		local Frame6 = fn14("Frame", {
-			BackgroundColor3 = color2,
+			BackgroundColor3 = tbl6.cardLine,
 			AnchorPoint = Vector2.new(0, 1),
 			Position = UDim2.new(0, 14, 1, 0),
 			Size = UDim2.new(1, -28, 0, 1),
@@ -12515,14 +12527,23 @@ local function fn12()
 				Z = 2,
 			})
 
+			local tabStroke = Instance.new("UIStroke")
+			tabStroke.Color = glowWhite
+			tabStroke.Thickness = 1
+			tabStroke.Transparency = 1
+			tabStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+			tabStroke.LineJoinMode = Enum.LineJoinMode.Round
+			tabStroke.Parent = TextButton4
+
 			local flag6 = false
 
 			tbl20._paint = function(arg6, arg7)
 				flag6 = arg7
-				fn19(TextButton4, 0.2, { BackgroundTransparency = arg7 and 0 or 1, BackgroundColor3 = arg7 and color2 or tbl6.inkRaised })
-				fn19(Frame24, 0.2, { BackgroundColor3 = arg7 and tbl6.ink or tbl6.inkRaised })
-				fn19(v40, 0.2, { ImageColor3 = arg7 and color2 or tbl6.inkSub })
-				fn19(v41, 0.2, { TextColor3 = arg7 and tbl6.ink or tbl6.inkSub })
+				fn19(TextButton4, 0.2, { BackgroundTransparency = arg7 and 0.55 or 1, BackgroundColor3 = arg7 and tbl6.inkRaised or tbl6.inkRaised })
+				fn19(Frame24, 0.2, { BackgroundColor3 = arg7 and tbl6.card or tbl6.inkRaised })
+				fn19(v40, 0.2, { ImageColor3 = arg7 and glowWhite or tbl6.inkSub })
+				fn19(v41, 0.2, { TextColor3 = arg7 and glowWhite or tbl6.inkSub })
+				fn19(tabStroke, 0.2, { Transparency = arg7 and 0.15 or 1, Thickness = arg7 and 1.5 or 1, Color = arg7 and glowWhite or tbl6.cardLine })
 				v41.FontFace = fn13(arg7 and fontWeight.SemiBold or fontWeight.Medium)
 			end
 
