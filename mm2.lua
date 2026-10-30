@@ -11498,7 +11498,7 @@ local function fn12()
 		fn16(Frame10, tbl6.inkLine)
 
 		local ImageLabel = fn14("ImageLabel", {
-			BackgroundColor3 = tbl6.inkLine,
+			BackgroundColor3 = color(10, 10, 10),
 			AnchorPoint = Vector2.new(0, 0.5),
 			Position = UDim2.new(0, 10, 0.5, 0),
 			Size = UDim2.fromOffset(34, 34),
@@ -11568,6 +11568,7 @@ local function fn12()
 
 		local Frame15 = fn14("Frame", {
 			BackgroundColor3 = color2,
+			BackgroundTransparency = 1,
 			Position = UDim2.fromOffset(22, 13),
 			Size = UDim2.fromOffset(38, 38),
 			Parent = Frame14,
@@ -11575,7 +11576,7 @@ local function fn12()
 
 		fn15(Frame15, 11)
 		local UIScale2 = fn14("UIScale", { Parent = Frame15 })
-		local v14 = fn18(Frame15, "house", 18, tbl6.ink, tbl8)
+		local v14 = fn18(Frame15, "house", 18, tbl6.inkText, tbl8)
 
 		local v15 = fn17(Frame14, {
 			Size = 11,
@@ -11770,23 +11771,23 @@ local function fn12()
 		})
 
 		fn15(TextButton3, 25)
-		fn14("UIGradient", { Rotation = 90, Color = ColorSequence.new(color(30, 30, 37), color(9, 9, 12)), Parent = TextButton3 })
-		local v20 = fn16(TextButton3, color2)
+		fn14("UIGradient", { Rotation = 90, Color = ColorSequence.new(tbl6.inkRaised, tbl6.ink), Parent = TextButton3 })
+		local v20 = fn16(TextButton3, tbl6.cardLine)
 		v20.Thickness = 1.5
 		local v21 = fn14
 		local tbl15 = {}
 		local numberSequence2 = NumberSequence.new
 		local tbl16 = {}
-		local v22 = NumberSequenceKeypoint.new(0, 0.3)
-		local v23 = NumberSequenceKeypoint.new(0.3, 0.88)
-		local v24 = NumberSequenceKeypoint.new(0.7, 0.88)
+		local v22 = NumberSequenceKeypoint.new(0, 0.15)
+		local v23 = NumberSequenceKeypoint.new(0.3, 0.4)
+		local v24 = NumberSequenceKeypoint.new(0.7, 0.4)
 		local new2 = NumberSequenceKeypoint.new
 		tbl16[1] = v22
 		tbl16[2] = v23
 		tbl16[3] = v24
 
 		do
-			local values = table.pack(new2(1, 0.3))
+			local values = table.pack(new2(1, 0.15))
 			table.move(values, 1, values.n, 4, tbl16)
 		end
 
@@ -12507,6 +12508,7 @@ local function fn12()
 
 			local Frame24 = fn14("Frame", {
 				BackgroundColor3 = tbl6.inkRaised,
+				BackgroundTransparency = 1,
 				AnchorPoint = Vector2.new(0, 0.5),
 				Position = UDim2.new(0, 5, 0.5, 0),
 				Size = UDim2.fromOffset(26, 26),
@@ -12540,7 +12542,7 @@ local function fn12()
 			tbl20._paint = function(arg6, arg7)
 				flag6 = arg7
 				fn19(TextButton4, 0.2, { BackgroundTransparency = arg7 and 0.55 or 1, BackgroundColor3 = arg7 and tbl6.inkRaised or tbl6.inkRaised })
-				fn19(Frame24, 0.2, { BackgroundColor3 = arg7 and tbl6.card or tbl6.inkRaised })
+				fn19(Frame24, 0.2, { BackgroundColor3 = arg7 and tbl6.card or tbl6.inkRaised, BackgroundTransparency = 1 })
 				fn19(v40, 0.2, { ImageColor3 = arg7 and glowWhite or tbl6.inkSub })
 				fn19(v41, 0.2, { TextColor3 = arg7 and glowWhite or tbl6.inkSub })
 				fn19(tabStroke, 0.2, { Transparency = arg7 and 0.15 or 1, Thickness = arg7 and 1.5 or 1, Color = arg7 and glowWhite or tbl6.cardLine })
@@ -12552,7 +12554,7 @@ local function fn12()
 					return
 				end
 				fn19(TextButton4, 0.15, { BackgroundTransparency = 0.4 })
-				fn19(Frame24, 0.15, { BackgroundColor3 = tbl6.inkLine })
+				fn19(Frame24, 0.15, { BackgroundColor3 = tbl6.inkLine, BackgroundTransparency = 1 })
 				fn19(v41, 0.15, { TextColor3 = tbl6.inkText })
 				fn19(v40, 0.15, { ImageColor3 = tbl6.inkText })
 			end)
@@ -12765,6 +12767,7 @@ local function fn12()
 
 				local Frame26 = fn14("Frame", {
 					BackgroundColor3 = color2,
+					BackgroundTransparency = 1,
 					AnchorPoint = Vector2.new(0, 0.5),
 					Position = UDim2.new(0, 16, 0.5, 0),
 					Size = UDim2.fromOffset(30, 30),
@@ -12772,7 +12775,7 @@ local function fn12()
 				})
 
 				fn15(Frame26, 9)
-				fn18(Frame26, arg4.Icon, 15, tbl6.ink, tbl8)
+				fn18(Frame26, arg4.Icon, 15, tbl6.inkText, tbl8)
 
 				fn17(TextButton4, {
 					Text = arg4.Title,
@@ -13153,7 +13156,7 @@ local function fn12()
 				end
 
 				local v43 = fn14
-				local tbl21 = { BackgroundColor3 = color3 or color2 }
+				local tbl21 = { BackgroundColor3 = color3 or color2, BackgroundTransparency = color3 and 0 or 1 }
 				tbl21.AnchorPoint = Vector2.new(1, 0.5)
 				tbl21.Position = UDim2.new(1, -16, 0.5, 0)
 				tbl21.Size = UDim2.fromOffset(30, 30)
@@ -13161,7 +13164,7 @@ local function fn12()
 				tbl21.Parent = v40
 				local Frame26 = v43("Frame", tbl21)
 				fn15(Frame26, 15)
-				fn18(Frame26, arg6.Icon or "chevron-right", 15, color3 and color2 or tbl6.ink, { Anchor = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.5), Z = 2 })
+				fn18(Frame26, arg6.Icon or "chevron-right", 15, color3 and color2 or tbl6.inkText, { Anchor = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.5), Z = 2 })
 				local UIScale3 = fn14("UIScale", { Parent = Frame26 })
 
 				v41.MouseEnter:Connect(function()
@@ -14205,7 +14208,7 @@ local v5
 v5 = starUI:CreateWindow({
 	Title = "Crossaint Hub",
 	Icon = "star",
-	Logo = "rbxthumb://type=Asset&id=85661114309874&w=420&h=420",
+	Logo = "rbxthumb://type=Asset&id=133732828241667&w=420&h=420",
 	Author = "Murder Mystery 2",
 	Folder = "MarbegMM2",
 	Size = UDim2.fromOffset(740, 520),
