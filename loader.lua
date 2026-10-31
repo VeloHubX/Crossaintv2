@@ -237,6 +237,15 @@ pcall(function()
 		_G.InfiniteJumpSetEnabled(false)
 	end
 
+	if _G.__SpeedGlitchConn then
+		pcall(function()
+			_G.__SpeedGlitchConn:Disconnect()
+		end)
+		_G.__SpeedGlitchConn = nil
+	end
+
+	_G.SpeedGlitchEnabled = false
+
 	if _G.WallJumpSetEnabled then
 		_G.WallJumpSetEnabled(false)
 	end
@@ -4366,6 +4375,48 @@ do
 
 	table.insert(_G.CoinESPConn, connection2)
 end
+
+_G.SpeedGlitchEnabled = false
+_G.SpeedGlitchPower = 2
+
+_G.SpeedGlitchSetEnabled = function(arg)
+    _G.SpeedGlitchEnabled = arg and true or false
+end
+
+_G.SpeedGlitchSetPower = function(arg)
+    _G.SpeedGlitchPower = math.clamp(tonumber(arg) or 2, 1, 5)
+end
+
+if _G.__SpeedGlitchConn then
+    pcall(function() _G.__SpeedGlitchConn:Disconnect() end)
+    _G.__SpeedGlitchConn = nil
+end
+
+_G.__SpeedGlitchConn = RunService.Heartbeat:Connect(function(deltaTime)
+    if not _G.SpeedGlitchEnabled then
+        return
+    end
+    local character = localPlayer.Character
+    if not character then
+        return
+    end
+    local humanoid = character:FindFirstChildOfClass("Humanoid")
+    local root = character:FindFirstChild("HumanoidRootPart")
+    if not humanoid or not root then
+        return
+    end
+    if humanoid.MoveDirection.Magnitude <= 0 then
+        return
+    end
+    if humanoid.FloorMaterial ~= Enum.Material.Air then
+        return
+    end
+    root.CFrame = root.CFrame + humanoid.MoveDirection * _G.SpeedGlitchPower * 15 * deltaTime
+    local v = root.AssemblyLinearVelocity
+    if v.Y < 0 then
+        root.AssemblyLinearVelocity = Vector3.new(v.X, v.Y * 0.97, v.Z)
+    end
+end)
 
 _G.RoleFlingBusy = false
 _G.RoleFlingStatus = "Ready"
@@ -13953,330 +14004,6 @@ _G.StarUI = fn12()
 local starUI
 starUI = _G.StarUI
 _G.WindUI = starUI
-
--- ============================================================
--- CROSSAINT EXTRAS — HitboxExpander · Wall Phase · XRay · Auto Prestige
--- Ported from Foxname MM2 for controlled/owned-server use
--- ============================================================
-
--- Hitbox Expander
-do
-	local _hbx = {
-		enabled = false,
-		size = 6,
-		visible = false,
-		stabActive = false,
-		stabGeneration = 0,
-		originals = {},
-		partConnections = {},
-		playerConnections = {},
-		localCharacterConnection = nil,
-		localToolConnections = {},
-		localPlayerConnection = nil,
-	}
-	_G.__HitboxExpander = _hbx
-
-	local function hbxRestorePart(part)
-		local v = _hbx.originals[part]
-		if not v then return end
-		local c = _hbx.partConnections[part]
-		if c then
-			if type(c) == "table" then
-				for _, conn in pairs(c) do if conn and conn.Connected then conn:Disconnect() end end
-			elseif c.Connected then c:Disconnect() end
-			_hbx.partConnections[part] = nil
-		end
-		_hbx.originals[part] = nil
-		if not part.Parent then return end
-		pcall(function()
-			part.Size = v.Size
-			part.CanCollide = v.CanCollide
-			part.CanQuery = v.CanQuery
-			part.CanTouch = v.CanTouch
-			part.Massless = v.Massless
-			part.Transparency = v.Transparency
-			part.LocalTransparencyModifier = v.LocalTransparencyModifier
-			part.Color = v.Color
-			part.Material = v.Material
-		end)
-	end
-
-	local function hbxApplyCharacter(player, char)
-		if not _hbx.enabled or not _hbx.stabActive or player == Players.LocalPlayer or not char then return end
-		local hrp = char:FindFirstChild("HumanoidRootPart")
-		if not hrp or not hrp:IsA("BasePart") then return end
-		if not _hbx.originals[hrp] then
-			_hbx.originals[hrp] = {
-				Size = hrp.Size, CanCollide = hrp.CanCollide, CanQuery = hrp.CanQuery,
-				CanTouch = hrp.CanTouch, Massless = hrp.Massless, Transparency = hrp.Transparency,
-				LocalTransparencyModifier = hrp.LocalTransparencyModifier, Color = hrp.Color, Material = hrp.Material,
-			}
-		end
-		local n = math.clamp(tonumber(_hbx.size) or 6, 2, 50)
-		pcall(function()
-			hrp.Size = Vector3.new(n, n, n)
-			hrp.CanCollide = false
-			hrp.Massless = true
-			hrp.CanQuery = true
-			hrp.CanTouch = true
-			hrp.Transparency = _hbx.visible and 0.55 or 0.99
-			hrp.LocalTransparencyModifier = _hbx.visible and 0 or 1
-			if _hbx.visible then hrp.Color = Color3.fromRGB(255, 70, 70); hrp.Material = Enum.Material.Neon end
-		end)
-	end
-
-	local function hbxRestoreAll()
-		local keys = {}
-		for k in pairs(_hbx.originals) do keys[#keys+1] = k end
-		for _, p in ipairs(keys) do hbxRestorePart(p) end
-	end
-
-	local function hbxEndWindow(gen)
-		if gen and _hbx.stabGeneration ~= gen then return false end
-		_hbx.stabGeneration += 1
-		_hbx.stabActive = false
-		hbxRestoreAll()
-		return true
-	end
-
-	local function hbxBeginWindow()
-		if not _hbx.enabled then return end
-		local char = Players.LocalPlayer.Character
-		local knife = char and char:FindFirstChild("Knife")
-		if not knife or not knife:IsA("Tool") then return end
-		_hbx.stabGeneration += 1
-		local gen = _hbx.stabGeneration
-		_hbx.stabActive = true
-		for _, player in ipairs(Players:GetPlayers()) do
-			if player ~= Players.LocalPlayer and player.Character then
-				task.spawn(hbxApplyCharacter, player, player.Character)
-			end
-		end
-		task.delay(0.55, function() hbxEndWindow(gen) end)
-	end
-
-	local function hbxTrackKnife(tool)
-		if not _hbx.enabled or not tool or not tool:IsA("Tool") or tool.Name ~= "Knife" or _hbx.localToolConnections[tool] then return end
-		_hbx.localToolConnections[tool] = tool.Activated:Connect(hbxBeginWindow)
-	end
-
-	local function hbxStartKnifeTracking()
-		if _hbx.localCharacterConnection then _hbx.localCharacterConnection:Disconnect(); _hbx.localCharacterConnection = nil end
-		for k, c in pairs(_hbx.localToolConnections) do if c and c.Connected then c:Disconnect() end; _hbx.localToolConnections[k] = nil end
-		local char = Players.LocalPlayer.Character
-		if not char then return end
-		for _, child in ipairs(char:GetChildren()) do hbxTrackKnife(child) end
-		_hbx.localCharacterConnection = char.ChildAdded:Connect(hbxTrackKnife)
-	end
-
-	local function hbxTrackPlayer(player)
-		if player == Players.LocalPlayer or _hbx.playerConnections[player] then return end
-		_hbx.playerConnections[player] = player.CharacterAdded:Connect(function(c)
-			if _hbx.enabled then task.spawn(hbxApplyCharacter, player, c) end
-		end)
-	end
-
-	for _, p in ipairs(Players:GetPlayers()) do hbxTrackPlayer(p) end
-	table.insert(_G.CoinESPConn, Players.PlayerAdded:Connect(hbxTrackPlayer))
-	table.insert(_G.CoinESPConn, Players.PlayerRemoving:Connect(function(player)
-		local c = _hbx.playerConnections[player]; if c then c:Disconnect(); _hbx.playerConnections[player] = nil end
-		local hrp = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
-		if hrp then hbxRestorePart(hrp) end
-	end))
-
-	_G.HitboxExpanderSetEnabled = function(en)
-		_hbx.enabled = en and true or false
-		if _hbx.enabled then
-			hbxStartKnifeTracking()
-			if _hbx.localPlayerConnection then _hbx.localPlayerConnection:Disconnect() end
-			_hbx.localPlayerConnection = Players.LocalPlayer.CharacterAdded:Connect(function()
-				task.defer(hbxStartKnifeTracking)
-			end)
-		else
-			_hbx.stabGeneration += 1
-			_hbx.stabActive = false
-			if _hbx.localCharacterConnection then _hbx.localCharacterConnection:Disconnect(); _hbx.localCharacterConnection = nil end
-			for k, c in pairs(_hbx.localToolConnections) do if c and c.Connected then c:Disconnect() end; _hbx.localToolConnections[k] = nil end
-			if _hbx.localPlayerConnection then _hbx.localPlayerConnection:Disconnect(); _hbx.localPlayerConnection = nil end
-			hbxRestoreAll()
-		end
-	end
-	_G.HitboxExpanderSetSize = function(n) _hbx.size = math.clamp(tonumber(n) or 6, 2, 50) end
-	_G.HitboxExpanderSetVisible = function(v) _hbx.visible = v and true or false end
-	_G.HitboxExpanderEnabled = false
-end
-
--- Wall Phase (noclip for walls only — own server / studio)
-do
-	local _wp = { enabled = false, parts = {}, conn = nil, stepConn = nil }
-	_G.__WallPhase = _wp
-
-	local function wpApply(part)
-		if not part:IsA("BasePart") then return end
-		local char = Players.LocalPlayer.Character
-		if not char or part:IsDescendantOf(char) then return end
-		if _wp.parts[part] == nil then _wp.parts[part] = part.CanCollide end
-		if part.CanCollide then part.CanCollide = false end
-	end
-
-	local function wpRestore()
-		for k, v in pairs(_wp.parts) do
-			if k.Parent then pcall(function() k.CanCollide = v end) end
-		end
-		table.clear(_wp.parts)
-	end
-
-	_G.WallPhaseSetEnabled = function(en)
-		_wp.enabled = en and true or false
-		if not _wp.enabled then
-			if _wp.conn then _wp.conn:Disconnect(); _wp.conn = nil end
-			if _wp.stepConn then _wp.stepConn:Disconnect(); _wp.stepConn = nil end
-			wpRestore()
-			return
-		end
-		-- apply to all non-character parts within a radius
-		_wp.conn = workspace.DescendantAdded:Connect(function(d)
-			if _wp.enabled then task.defer(wpApply, d) end
-		end)
-		_wp.stepConn = RunService.PreSimulation:Connect(function()
-			if not _wp.enabled then return end
-			local char = Players.LocalPlayer.Character
-			local hrp = char and char:FindFirstChild("HumanoidRootPart")
-			if not hrp then return end
-			local pos = hrp.Position
-			for _, d in ipairs(workspace:GetDescendants()) do
-				if d:IsA("BasePart") and d.CanCollide and not d:IsDescendantOf(char) and (d.Position - pos).Magnitude < 20 then
-					wpApply(d)
-				end
-			end
-		end)
-	end
-	_G.WallPhaseEnabled = false
-end
-
--- XRay (map transparency — own server / studio)
-do
-	local _xr = {
-		enabled = false,
-		transparency = 0.75,
-		originals = {},
-		scanGen = 0,
-		mapRef = nil,
-		conn = nil,
-		removeConn = nil,
-	}
-	_G.__XRay = _xr
-
-	local function xrGetMap()
-		if not _G.InRound then return nil end
-		local lobby = workspace:FindFirstChild("Lobby")
-		for _, child in ipairs(workspace:GetChildren()) do
-			if child ~= lobby and (child:IsA("Model") or child:IsA("Folder")) and
-				(child:FindFirstChild("CoinContainer", true) or child:FindFirstChild("Coin_Server", true)) then
-				return child
-			end
-		end
-		return nil
-	end
-
-	local function xrRestoreAll()
-		_xr.scanGen += 1
-		for k, v in pairs(_xr.originals) do
-			if k and k.Parent then pcall(function() k.LocalTransparencyModifier = v end) end
-			_xr.originals[k] = nil
-		end
-		_xr.mapRef = nil
-	end
-
-	local function xrApplyPart(part)
-		if not _xr.enabled or not _xr.mapRef then return end
-		if not part:IsA("BasePart") or part.Name == "Coin_Server" or part.Transparency >= 1 then return end
-		if _xr.originals[part] == nil then _xr.originals[part] = part.LocalTransparencyModifier end
-		local t = math.clamp((_xr.transparency - part.Transparency) / math.max(1 - part.Transparency, 0.001), 0, 1)
-		part.LocalTransparencyModifier = t
-	end
-
-	local function xrScan()
-		if not _xr.enabled then return end
-		local map = xrGetMap()
-		if not map then return end
-		if _xr.mapRef ~= map then
-			xrRestoreAll()
-			_xr.mapRef = map
-		else
-			_xr.scanGen += 1
-		end
-		local gen = _xr.scanGen
-		task.spawn(function()
-			for i, d in ipairs(map:GetDescendants()) do
-				if not _xr.enabled or _xr.scanGen ~= gen then return end
-				pcall(xrApplyPart, d)
-				if i % 300 == 0 then RunService.Heartbeat:Wait() end
-			end
-		end)
-	end
-
-	local function xrStop()
-		_xr.enabled = false
-		if _xr.conn then _xr.conn:Disconnect(); _xr.conn = nil end
-		if _xr.removeConn then _xr.removeConn:Disconnect(); _xr.removeConn = nil end
-		xrRestoreAll()
-	end
-
-	_G.XRaySetEnabled = function(en)
-		_xr.enabled = en and true or false
-		if not _xr.enabled then xrStop(); return end
-		xrScan()
-		_xr.conn = workspace.DescendantAdded:Connect(function(d)
-			if _xr.enabled and _xr.mapRef and d:IsDescendantOf(_xr.mapRef) then pcall(xrApplyPart, d) end
-		end)
-		_xr.removeConn = workspace.DescendantRemoving:Connect(function(d)
-			_xr.originals[d] = nil
-		end)
-	end
-	_G.XRaySetTransparency = function(t) _xr.transparency = math.clamp(tonumber(t) or 0.75, 0.3, 1) end
-	_G.XRayEnabled = false
-
-	-- refresh when round changes
-	table.insert(_G.CoinESPConn, gameplay.RoundStart.OnClientEvent:Connect(function()
-		if _xr.enabled then task.delay(1, xrScan) end
-	end))
-end
-
--- Auto Prestige (client-side only — fires server remote)
-do
-	_G.AutoPrestigeEnabled = false
-	_G.AutoPrestigeLevel = 100
-
-	local prestigeLoopId = {}
-	_G.__AutoPrestigeLoopId = prestigeLoopId
-
-	task.spawn(function()
-		while _G.__AutoPrestigeLoopId == prestigeLoopId do
-			task.wait(5)
-			if not _G.AutoPrestigeEnabled then continue end
-			pcall(function()
-				local ProfileData = require(ReplicatedStorage.Modules.ProfileData)
-				local LevelModule = require(ReplicatedStorage.Modules.LevelModule)
-				local level = LevelModule and LevelModule.GetLevel and LevelModule.GetLevel(ProfileData.NewXP or 0) or 0
-				if level >= (_G.AutoPrestigeLevel or 100) then
-					local remote = ReplicatedStorage:FindFirstChild("Remotes") and ReplicatedStorage.Remotes:FindFirstChild("Misc") and ReplicatedStorage.Remotes.Misc:FindFirstChild("Prestige")
-					if remote then remote:FireServer() end
-				end
-			end)
-		end
-	end)
-
-	_G.AutoPrestigeSetEnabled = function(en)
-		_G.AutoPrestigeEnabled = en and true or false
-	end
-	_G.AutoPrestigeSetLevel = function(n)
-		_G.AutoPrestigeLevel = math.clamp(math.floor(tonumber(n) or 100), 1, 1000)
-	end
-end
-
-print("Crossaint Extras loaded (HitboxExpander · WallPhase · XRay · AutoPrestige)")
-
 pcall(_G.__ApplyActionButtonIcons)
 _G.__ThemePainters = {}
 
@@ -14595,95 +14322,6 @@ local v11 = v5:Section({ Title = "Farming", Icon = "coins", Opened = true })
 tbl5.Farm = v11:Tab({ Title = "Auto Farm", Icon = "bot" })
 tbl5.Cases = v11:Tab({ Title = "Cases", Icon = "package-open" })
 tbl5.Webhook = v11:Tab({ Title = "Webhook", Icon = "webhook" })
-
--- Extras section GUI (injected after Farming section)
-local v_extras = v5:Section({ Title = "Extras", Icon = "box", Opened = true })
-tbl5.Extras = v_extras:Tab({ Title = "Extras", Icon = "box" })
-
-do
-	-- Hitbox Expander
-	local vHbx = tbl6.Box(tbl5.Extras, "Hitbox Expander", "expand")
-	tbl6.Toggle(vHbx, {
-		Title = "Hitbox Expander",
-		Flag = "HitboxExpander",
-		Icon = "expand",
-		Callback = function(en)
-			_G.HitboxExpanderEnabled = en
-			_G.HitboxExpanderSetEnabled(en)
-			if _G.WindNotify then
-				_G.WindNotify("Hitbox Expander", en and "Enabled" or "Disabled", "expand")
-			end
-		end,
-	})
-	tbl6.Slider(vHbx, {
-		Title = "Hitbox Size",
-		Flag = "HitboxSize",
-		Min = 2, Max = 50, Default = 6, Step = 1,
-		Callback = function(n) _G.HitboxExpanderSetSize(n) end,
-	})
-	tbl6.Toggle(vHbx, {
-		Title = "Show Hitboxes",
-		Flag = "HitboxVisible",
-		Callback = function(v) _G.HitboxExpanderSetVisible(v) end,
-	})
-
-	-- Wall Phase
-	local vWp = tbl6.Box(tbl5.Extras, "Wall Phase", "layers")
-	tbl6.Toggle(vWp, {
-		Title = "Wall Phase",
-		Flag = "WallPhase",
-		Icon = "layers",
-		Callback = function(en)
-			_G.WallPhaseEnabled = en
-			_G.WallPhaseSetEnabled(en)
-			if _G.WindNotify then
-				_G.WindNotify("Wall Phase", en and "Enabled" or "Disabled", "layers")
-			end
-		end,
-	})
-
-	-- XRay
-	local vXr = tbl6.Box(tbl5.Extras, "XRay", "eye")
-	tbl6.Toggle(vXr, {
-		Title = "XRay",
-		Flag = "XRay",
-		Icon = "eye",
-		Callback = function(en)
-			_G.XRayEnabled = en
-			_G.XRaySetEnabled(en)
-			if _G.WindNotify then
-				_G.WindNotify("XRay", en and "Enabled" or "Disabled", "eye")
-			end
-		end,
-	})
-	tbl6.Slider(vXr, {
-		Title = "Map Transparency",
-		Flag = "XRayTransparency",
-		Min = 30, Max = 100, Default = 75, Step = 5,
-		Callback = function(n) _G.XRaySetTransparency(n / 100) end,
-	})
-
-	-- Auto Prestige
-	local vAp = tbl6.Box(tbl5.Extras, "Auto Prestige", "star")
-	tbl6.Toggle(vAp, {
-		Title = "Auto Prestige",
-		Flag = "AutoPrestige",
-		Icon = "star",
-		Callback = function(en)
-			_G.AutoPrestigeSetEnabled(en)
-			if _G.WindNotify then
-				_G.WindNotify("Auto Prestige", en and "Enabled" or "Disabled", "star")
-			end
-		end,
-	})
-	tbl6.Slider(vAp, {
-		Title = "Trigger Level",
-		Flag = "AutoPrestigeLevel",
-		Min = 1, Max = 1000, Default = 100, Step = 1,
-		Callback = function(n) _G.AutoPrestigeSetLevel(n) end,
-	})
-end
-
 _G.CrosshairTab = tbl5.Crosshair
 _G.MM2ScriptConfig = v5.ConfigManager and v5.ConfigManager:CreateConfig("mm2_settings")
 _G.AutoConfigEnabled = true
@@ -16240,6 +15878,23 @@ tbl6.Slider(v34, {
 	Max = 200,
 	Default = 50,
 	Set = "PlayerJumpPowerSet",
+})
+
+tbl6.Toggle(v34, {
+    Title = "Speed Glitch (Jumping)",
+    Flag = "SpeedGlitch",
+    Set = "SpeedGlitchSetEnabled",
+    Notify = "chevrons-up",
+})
+
+tbl6.Slider(v34, {
+    Title = "Speed Glitch Power",
+    Flag = "SpeedGlitchPower",
+    Min = 1,
+    Max = 5,
+    Default = 2,
+    Step = 1,
+    Set = "SpeedGlitchSetPower",
 })
 
 tbl6.Toggle(v34, { Title = "Noclip", Flag = "Noclip", Set = "NoclipSetEnabled", Notify = "ghost" })
