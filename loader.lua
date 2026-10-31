@@ -3447,7 +3447,7 @@ do
 			return handle and handle.Position or humanoidRootPart2.Position
 		end
 
-		local function fn18(arg)
+				local function fn18(arg)
 			local tbl5 = {}
 			local v10 = fn17()
 			local predictionLeadFor2 = _G.__PredictionLeadFor and _G.__PredictionLeadFor(humanoidRootPart, v10) or Vector3.zero
@@ -3493,7 +3493,7 @@ do
 						end
 
 						if exitTo == 1 then
-							tbl5[#tbl5 + 1] = t11
+							tbl5[#tbl5 + 1] = n4
 							if (arg or 5) <= #tbl5 then
 								return tbl5
 							end
@@ -3527,10 +3527,40 @@ do
 				end
 			end
 		else
-			local flag3 = false
+			-- No clear shot found by fn18. Distinguish wall from innocent.
+			-- Original block used only fn12 (wall ray) and inverted the result.
+			-- Now uses __InnocentInLine to report honestly.
+			local murdererVisible = false
+			local innocentInWay = false
+			local origin = fn17()
 
 			for _, v10 in ipairs({ "UpperTorso", "Head", "HumanoidRootPart", "Torso" }) do
 				local v11 = character:FindFirstChild(v10)
+
+				if v11 and v11:IsA("BasePart") then
+					local position = v11.Position
+
+					if fn12(origin, character, position, character2) then
+						murdererVisible = true
+
+						if _G.__InnocentInLine(origin, character, position, character2) then
+							innocentInWay = true
+							break
+						end
+					end
+				end
+			end
+
+			if innocentInWay then
+				_G.ShootMurdererStatus = "Innocent in the way, holding fire"
+			elseif murdererVisible then
+				_G.ShootMurdererStatus = "Murderer visible — shot did not fire"
+			else
+				_G.ShootMurdererStatus = "Murderer is behind a wall"
+			end
+
+			flag2 = false
+		end
 				local v12
 
 				if v11 then
