@@ -8325,12 +8325,9 @@ do
 		return nil
 	end
 
-		return nil
-	end
-
 	_G.__AimEnemyHead = aimEnemyHead
 
-		local fovGui = Instance.new("ScreenGui")
+	local fovGui = Instance.new("ScreenGui")
 	fovGui.Name = "MarbegFOVCircle"
 	fovGui.ResetOnSpawn = false
 	fovGui.IgnoreGuiInset = true
@@ -8368,6 +8365,44 @@ do
 			fovStroke.Color = Color3.fromHSV(os.clock() * 0.35 % 1, 1, 1)
 		end
 	end)
+
+	_G.XRayEnabled = false
+	local xrayOriginals = setmetatable({}, { __mode = "k" })
+	local xrayConn = nil
+
+	local function processXRayPart(part)
+		if not _G.XRayEnabled or not part or not part.Parent then return end
+		if part:IsA("BasePart") and part.Transparency < 1 and part.Name ~= "Coin_Server" then
+			if xrayOriginals[part] == nil then
+				xrayOriginals[part] = part.LocalTransparencyModifier
+			end
+			part.LocalTransparencyModifier = 0.72
+		end
+	end
+
+	_G.XRaySetEnabled = function(arg)
+		_G.XRayEnabled = arg and true or false
+
+		if not _G.XRayEnabled then
+			for part, original in pairs(xrayOriginals) do
+				if part and part.Parent then
+					part.LocalTransparencyModifier = original
+				end
+			end
+			xrayOriginals = setmetatable({}, { __mode = "k" })
+			if xrayConn then
+				xrayConn:Disconnect()
+				xrayConn = nil
+			end
+			return
+		end
+
+		for _, descendant in ipairs(workspace:GetDescendants()) do
+			processXRayPart(descendant)
+		end
+
+		xrayConn = workspace.DescendantAdded:Connect(processXRayPart)
+	end
 
 	local function fn13()
 		local character = localPlayer.Character
