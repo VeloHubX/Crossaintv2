@@ -3561,24 +3561,6 @@ do
 
 			flag2 = false
 		end
-				local v12
-
-				if v11 then
-					local position = v11.Position
-					v12 = fn12(fn17(), character, position, character2)
-				else
-					v12 = v11
-				end
-
-				if v12 then
-					flag3 = true
-					break
-				end
-			end
-
-			_G.ShootMurdererStatus = flag3 and "Innocent in the way, holding fire" or "Murderer is behind a wall"
-			flag2 = false
-		end
 
 		flag = false
 
