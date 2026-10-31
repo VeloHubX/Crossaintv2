@@ -8327,6 +8327,8 @@ do
 
 	_G.__AimEnemyHead = aimEnemyHead
 
+	_G.FOV = _G.FOV or 150 -- This fixes the nil crash
+
 	local fovGui = Instance.new("ScreenGui")
 	fovGui.Name = "MarbegFOVCircle"
 	fovGui.ResetOnSpawn = false
