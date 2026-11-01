@@ -3447,7 +3447,7 @@ do
 			return handle and handle.Position or humanoidRootPart2.Position
 		end
 
-		local function fn18(arg)
+				local function fn18(arg)
 			local tbl5 = {}
 			local v10 = fn17()
 			local predictionLeadFor2 = _G.__PredictionLeadFor and _G.__PredictionLeadFor(humanoidRootPart, v10) or Vector3.zero
@@ -3493,7 +3493,7 @@ do
 						end
 
 						if exitTo == 1 then
-							tbl5[#tbl5 + 1] = t11
+							tbl5[#tbl5 + 1] = n4
 							if (arg or 5) <= #tbl5 then
 								return tbl5
 							end
@@ -3527,26 +3527,38 @@ do
 				end
 			end
 		else
-			local flag3 = false
+			-- No clear shot found by fn18. Distinguish wall from innocent.
+			-- Original block used only fn12 (wall ray) and inverted the result.
+			-- Now uses __InnocentInLine to report honestly.
+			local murdererVisible = false
+			local innocentInWay = false
+			local origin = fn17()
 
 			for _, v10 in ipairs({ "UpperTorso", "Head", "HumanoidRootPart", "Torso" }) do
 				local v11 = character:FindFirstChild(v10)
-				local v12
 
-				if v11 then
+				if v11 and v11:IsA("BasePart") then
 					local position = v11.Position
-					v12 = fn12(fn17(), character, position, character2)
-				else
-					v12 = v11
-				end
 
-				if v12 then
-					flag3 = true
-					break
+					if fn12(origin, character, position, character2) then
+						murdererVisible = true
+
+						if _G.__InnocentInLine(origin, character, position, character2) then
+							innocentInWay = true
+							break
+						end
+					end
 				end
 			end
 
-			_G.ShootMurdererStatus = flag3 and "Innocent in the way, holding fire" or "Murderer is behind a wall"
+			if innocentInWay then
+				_G.ShootMurdererStatus = "Innocent in the way, holding fire"
+			elseif murdererVisible then
+				_G.ShootMurdererStatus = "Murderer visible — shot did not fire"
+			else
+				_G.ShootMurdererStatus = "Murderer is behind a wall"
+			end
+
 			flag2 = false
 		end
 
@@ -8286,6 +8298,19 @@ do
 		if not v5 or not v5.Role or v5.Dead then
 			return nil
 		end
+		
+		-- FIX: If we are the Murderer and holding a knife, DO NOT lock the camera to the Sheriff.
+		if v5.Role == "Murderer" then
+			local character = localPlayer.Character
+			if character then
+				for _, child in ipairs(character:GetChildren()) do
+					if child:IsA("Tool") and string.find(string.lower(child.Name), "knife", 1, true) then
+						return nil
+					end
+				end
+			end
+		end
+
 		local tbl6
 
 		if v5.Role == "Murderer" then
@@ -8314,6 +8339,85 @@ do
 	end
 
 	_G.__AimEnemyHead = aimEnemyHead
+
+	_G.FOV = _G.FOV or 150 -- This fixes the nil crash
+
+	local fovGui = Instance.new("ScreenGui")
+	fovGui.Name = "MarbegFOVCircle"
+	fovGui.ResetOnSpawn = false
+	fovGui.IgnoreGuiInset = true
+	fovGui.DisplayOrder = 10
+	fovGui.Parent = fn2()
+
+	local fovFrame = Instance.new("Frame")
+	fovFrame.Name = "FOVCircle"
+	fovFrame.BackgroundTransparency = 1
+	fovFrame.BorderSizePixel = 0
+	fovFrame.AnchorPoint = Vector2.new(0.5, 0.5)
+	fovFrame.Position = UDim2.fromScale(0.5, 0.5)
+	fovFrame.Size = UDim2.new(0, _G.FOV * 2, 0, _G.FOV * 2)
+	fovFrame.Parent = fovGui
+
+	local fovCorner = Instance.new("UICorner")
+	fovCorner.CornerRadius = UDim.new(1, 0)
+	fovCorner.Parent = fovFrame
+
+	local fovStroke = Instance.new("UIStroke")
+	fovStroke.Thickness = 2
+	fovStroke.Color = Color3.fromRGB(255, 255, 255)
+	fovStroke.Parent = fovFrame
+
+	_G.UpdateFOVCircle = function()
+		fovFrame.Size = UDim2.new(0, _G.FOV * 2, 0, _G.FOV * 2)
+	end
+
+	_G.SetFOVCircleVisible = function(isVisible)
+		fovFrame.Visible = isVisible
+	end
+
+	RunService.RenderStepped:Connect(function()
+		if fovFrame.Visible then
+			fovStroke.Color = Color3.fromHSV(os.clock() * 0.35 % 1, 1, 1)
+		end
+	end)
+
+	_G.XRayEnabled = false
+	local xrayOriginals = setmetatable({}, { __mode = "k" })
+	local xrayConn = nil
+
+	local function processXRayPart(part)
+		if not _G.XRayEnabled or not part or not part.Parent then return end
+		if part:IsA("BasePart") and part.Transparency < 1 and part.Name ~= "Coin_Server" then
+			if xrayOriginals[part] == nil then
+				xrayOriginals[part] = part.LocalTransparencyModifier
+			end
+			part.LocalTransparencyModifier = 0.72
+		end
+	end
+
+	_G.XRaySetEnabled = function(arg)
+		_G.XRayEnabled = arg and true or false
+
+		if not _G.XRayEnabled then
+			for part, original in pairs(xrayOriginals) do
+				if part and part.Parent then
+					part.LocalTransparencyModifier = original
+				end
+			end
+			xrayOriginals = setmetatable({}, { __mode = "k" })
+			if xrayConn then
+				xrayConn:Disconnect()
+				xrayConn = nil
+			end
+			return
+		end
+
+		for _, descendant in ipairs(workspace:GetDescendants()) do
+			processXRayPart(descendant)
+		end
+
+		xrayConn = workspace.DescendantAdded:Connect(processXRayPart)
+	end
 
 	local function fn13()
 		local character = localPlayer.Character
@@ -17066,6 +17170,46 @@ do
 		if _G.CameraSettingsReset then
 			pcall(_G.CameraSettingsReset)
 		end
+
+_G.XRayEnabled = false
+local xrayOriginals = setmetatable({}, { __mode = "k" })
+local xrayConn = nil
+
+local function processXRayPart(part)
+	if not _G.XRayEnabled or not part or not part.Parent then return end
+	if part:IsA("BasePart") and part.Transparency < 1 and part.Name ~= "Coin_Server" then
+		if xrayOriginals[part] == nil then
+			xrayOriginals[part] = part.LocalTransparencyModifier
+		end
+		part.LocalTransparencyModifier = 0.72
+	end
+end
+
+_G.XRaySetEnabled = function(arg)
+	_G.XRayEnabled = arg and true or false
+
+	if not _G.XRayEnabled then
+		for part, original in pairs(xrayOriginals) do
+			if part and part.Parent then
+				part.LocalTransparencyModifier = original
+			end
+		end
+		xrayOriginals = setmetatable({}, { __mode = "k" })
+		if xrayConn then
+			xrayConn:Disconnect()
+			xrayConn = nil
+		end
+		return
+	end
+
+	-- Scan existing map
+	for _, descendant in ipairs(workspace:GetDescendants()) do
+		processXRayPart(descendant)
+	end
+
+	-- Listen for new parts
+	xrayConn = workspace.DescendantAdded:Connect(processXRayPart)
+end
 
 		_G.KnifeAuraEnabled = false
 
