@@ -8650,96 +8650,60 @@ do
 		_G.CrosshairSpinSpeed = math.clamp(tonumber(arg) or 180, 0, 720)
 	end
 
-	RunService:BindToRenderStep("MarbegCrosshair", Enum.RenderPriority.Last.Value, function(arg)
-		if not _G.CrosshairEnabled then
-			return
+	RunService:BindToRenderStep("MarbegCrosshair", Enum.RenderPriority.Last.Value, function(deltaTime)
+		-- 1. ALWAYS hide the native shift lock cursor and GUI, regardless of custom crosshair state
+		local mouse = localPlayer:GetMouse()
+		if mouse and mouse.Icon ~= "" then
+			pcall(function() mouse.Icon = "" end)
 		end
-		local mouseLocation = UserInputService:GetMouseLocation()
-
-		if UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled then
-			local currentCamera = workspace.CurrentCamera
-			mouseLocation = currentCamera and currentCamera.ViewportSize / 2 or mouseLocation
+		if UserInputService.MouseIconEnabled then
+			pcall(function() UserInputService.MouseIconEnabled = false end)
 		end
 
-		frame.Position = UDim2.fromOffset(mouseLocation.X, mouseLocation.Y)
+		local currentCamera = workspace.CurrentCamera
+		if not currentCamera then return end
 
-		if _G.CrosshairSpinEnabled then
-			frame.Rotation = (frame.Rotation + _G.CrosshairSpinSpeed * arg) % 360
+		-- 2. Detect the real Shift Lock state
+		local isShiftLocked = false
+		pcall(function()
+			local settings = UserSettings():GetService("UserGameSettings")
+			isShiftLocked = settings.RotationType == Enum.RotationType.CameraRelative
+		end)
+		
+		-- Fallback detection if settings fail
+		if not isShiftLocked then
+			local head = localPlayer.Character and localPlayer.Character:FindFirstChild("Head")
+			if head and (currentCamera.CFrame.Position - head.Position).Magnitude <= 1.25 then
+				isShiftLocked = true
+			end
+		end
+
+		-- 3. Custom Crosshair logic
+		if _G.CrosshairEnabled then
+			if not _G.CrosshairSpinEnabled then
+				frame.Rotation = 0
+			end
+
+			if isShiftLocked then
+				-- Show Custom Crosshair and follow mouse
+				local mouseLoc = UserInputService:GetMouseLocation()
+				if UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled then
+					mouseLoc = currentCamera.ViewportSize / 2
+				end
+				frame.Position = UDim2.fromOffset(mouseLoc.X, mouseLoc.Y)
+				frame.Visible = true
+
+				if _G.CrosshairSpinEnabled then
+					frame.Rotation = (frame.Rotation + _G.CrosshairSpinSpeed * deltaTime) % 360
+				end
+			else
+				-- Hide Custom Crosshair when not in shift lock
+				frame.Visible = false
+			end
 		else
-			frame.Rotation = 0
+			frame.Visible = false
 		end
 	end)
-
-	_G.HideShiftLockCrosshair = false
-	_G.__ShiftLockHiddenInstances = {}
-	_G.__ShiftLockIconConns = {}
-	_G.__ShiftLockCursorHidden = false
-	_G.__ShiftLockSavedCursorIcon = nil
-	_G.__ShiftLockSavedCursorEnabled = nil
-	_G.__ShiftLockCrosshairRequested = false
-
-	_G.ShiftLockCrosshairSetEnabled = function(arg)
-		-- Clear previous connections and unhide old instances
-		local shiftLockHiddenInstances = _G.__ShiftLockHiddenInstances
-		for k, shiftLockHiddenInstance in pairs(shiftLockHiddenInstances) do
-			if k and k.Parent then
-				pcall(function()
-					k.Visible = shiftLockHiddenInstance
-				end)
-			end
-			shiftLockHiddenInstances[k] = nil
-		end
-
-		for _, shiftLockIconConn in ipairs(_G.__ShiftLockIconConns) do
-			pcall(function()
-				shiftLockIconConn:Disconnect()
-			end)
-		end
-		_G.__ShiftLockIconConns = {}
-
-		pcall(function()
-			RunService:UnbindFromRenderStep("MarbegHideShiftLockCursor")
-		end)
-
-		-- Restore cursor if it was hidden
-		if _G.__ShiftLockCursorHidden then
-			local mouse = localPlayer:GetMouse()
-			if mouse then
-				pcall(function()
-					mouse.Icon = _G.__ShiftLockSavedCursorIcon or ""
-				end)
-			end
-			if _G.__ShiftLockSavedCursorEnabled ~= nil then
-				pcall(function()
-					UserInputService.MouseIconEnabled = _G.__ShiftLockSavedCursorEnabled
-				end)
-			end
-			_G.__ShiftLockCursorHidden = false
-		end
-
-		_G.HideShiftLockCrosshair = arg and true or false
-		_G.__ShiftLockCrosshairRequested = _G.HideShiftLockCrosshair
-		
-		-- Only hide if BOTH the custom crosshair is on AND the setting is on
-		if not _G.HideShiftLockCrosshair or not _G.CrosshairEnabled then
-			return
-		end
-
-		local mouse = localPlayer:GetMouse()
-		_G.__ShiftLockSavedCursorIcon = mouse and mouse.Icon or ""
-		_G.__ShiftLockSavedCursorEnabled = UserInputService.MouseIconEnabled
-		_G.__ShiftLockCursorHidden = true
-
-		local function forceHideCursor()
-			if mouse then
-				pcall(function()
-					mouse.Icon = ""
-				end)
-			end
-			pcall(function()
-				UserInputService.MouseIconEnabled = false
-			end)
-		end
 
 		forceHideCursor()
 		RunService:BindToRenderStep("MarbegHideShiftLockCursor", Enum.RenderPriority.Last.Value + 10, forceHideCursor)
