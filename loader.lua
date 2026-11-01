@@ -8298,6 +8298,19 @@ do
 		if not v5 or not v5.Role or v5.Dead then
 			return nil
 		end
+		
+		-- FIX: If we are the Murderer and holding a knife, DO NOT lock the camera to the Sheriff.
+		if v5.Role == "Murderer" then
+			local character = localPlayer.Character
+			if character then
+				for _, child in ipairs(character:GetChildren()) do
+					if child:IsA("Tool") and string.find(string.lower(child.Name), "knife", 1, true) then
+						return nil
+					end
+				end
+			end
+		end
+
 		local tbl6
 
 		if v5.Role == "Murderer" then
