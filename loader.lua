@@ -8705,8 +8705,20 @@ do
 		end
 	end)
 
-		forceHideCursor()
-		RunService:BindToRenderStep("MarbegHideShiftLockCursor", Enum.RenderPriority.Last.Value + 10, forceHideCursor)
+		shiftLockHiddenInstances = shiftLockHiddenInstances or setmetatable({}, { __mode = "k" })
+		_G.__ShiftLockIconConns = _G.__ShiftLockIconConns or {}
+		_G.__ShiftLockCursorBound = _G.__ShiftLockCursorBound or false
+		_G.__ShiftLockCrosshairRequested = _G.__ShiftLockCrosshairRequested or false
+
+		local function forceHideCursor()
+			local mouse = localPlayer:GetMouse()
+			if mouse and mouse.Icon ~= "" then
+				pcall(function() mouse.Icon = "" end)
+			end
+			if UserInputService.MouseIconEnabled then
+				pcall(function() UserInputService.MouseIconEnabled = false end)
+			end
+		end
 
 		local function hideIndicator(descendant)
 			if not (descendant:IsA("ImageLabel") or descendant:IsA("ImageButton")) then
@@ -8718,34 +8730,61 @@ do
 				image = string.lower(descendant.Image or "")
 			end)
 
-			-- Matches Roblox's internal names for the shift lock icon
 			if string.find(name, "shiftlock", 1, true) or string.find(name, "mouselock", 1, true) or string.find(name, "mouse_lock", 1, true) or string.find(name, "cursorimage", 1, true) or string.find(image, "mouselock", 1, true) or string.find(image, "shiftlock", 1, true) or string.find(image, "mouselockedcursor", 1, true) then
 				shiftLockHiddenInstances[descendant] = descendant.Visible
 				descendant.Visible = false
 			end
 		end
 
-		-- Scan CoreGui, PlayerGui, and the UI root
-		local roots = {}
-		local ok2, coreGui = pcall(function() return game:GetService("CoreGui") end)
-		if ok2 and coreGui then table.insert(roots, coreGui) end
-		
-		local playerGui = localPlayer and localPlayer:FindFirstChildOfClass("PlayerGui")
-		if playerGui then table.insert(roots, playerGui) end
-		
-		local ok3, hui = pcall(fn2)
-		if ok3 and hui then table.insert(roots, hui) end
+		forceHideCursor()
 
-		for _, root in ipairs(roots) do
-			for _, descendant in ipairs(root:GetDescendants()) do
-				pcall(hideIndicator, descendant)
-			end
-			-- Watch for new shift lock icons spawning
-			table.insert(_G.__ShiftLockIconConns, root.DescendantAdded:Connect(function(descendant)
-				task.defer(function()
-					pcall(hideIndicator, descendant)
+		if not _G.__ShiftLockCursorBound then
+			_G.__ShiftLockCursorBound = true
+			RunService:BindToRenderStep("MarbegHideShiftLockCursor", Enum.RenderPriority.Last.Value + 10, function()
+				forceHideCursor()
+
+				local roots = {}
+				local ok2, coreGui = pcall(function() return game:GetService("CoreGui") end)
+				if ok2 and coreGui then table.insert(roots, coreGui) end
+
+				local playerGui = localPlayer and localPlayer:FindFirstChildOfClass("PlayerGui")
+				if playerGui then table.insert(roots, playerGui) end
+
+				local ok3, hui = pcall(fn2)
+				if ok3 and hui then table.insert(roots, hui) end
+
+				for _, root in ipairs(roots) do
+					for _, descendant in ipairs(root:GetDescendants()) do
+						pcall(hideIndicator, descendant)
+					end
+
+					if not _G.__ShiftLockIconConns[root] then
+						_G.__ShiftLockIconConns[root] = root.DescendantAdded:Connect(function(descendant)
+							task.defer(function()
+								pcall(hideIndicator, descendant)
+							end)
+						end)
+					end
+				end
+			end)
+		end
+
+		_G.ShiftLockCrosshairSetEnabled = function(arg)
+			_G.__ShiftLockCrosshairRequested = arg and true or false
+
+			if _G.__ShiftLockCrosshairRequested then
+				if not _G.__ShiftLockCursorBound then
+					_G.__ShiftLockCursorBound = true
+					RunService:BindToRenderStep("MarbegHideShiftLockCursor", Enum.RenderPriority.Last.Value + 10, function()
+						forceHideCursor()
+					end)
+				end
+			else
+				pcall(function()
+					RunService:UnbindFromRenderStep("MarbegHideShiftLockCursor")
 				end)
-			end))
+				_G.__ShiftLockCursorBound = false
+			end
 		end
 	end
 
