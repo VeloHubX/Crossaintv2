@@ -3373,9 +3373,6 @@ do
 		end)
 
 		if currentCamera and cFrame then
-			-- Signal that the camera is locked for this shot so MarbegShiftLockAim
-			-- yields and does not fight this step for the camera CFrame.
-			_G.__QuickShotCameraActive = true
 			RunService:BindToRenderStep("MarbegQuickShotCameraLock", Enum.RenderPriority.Camera.Value + 10, function()
 				if workspace.CurrentCamera then
 					workspace.CurrentCamera.CFrame = cFrame
@@ -3387,9 +3384,6 @@ do
 			pcall(function()
 				RunService:UnbindFromRenderStep("MarbegQuickShotCameraLock")
 			end)
-
-			-- Camera lock released — ShiftLockAim may resume.
-			_G.__QuickShotCameraActive = false
 
 			for k, v5 in pairs(tbl5) do
 				if k.Parent then
@@ -8304,6 +8298,19 @@ do
 		if not v5 or not v5.Role or v5.Dead then
 			return nil
 		end
+		
+		-- FIX: If Murderer holds a knife, don't aimlock to Sheriff
+		if v5.Role == "Murderer" then
+			local character = localPlayer.Character
+			if character then
+				for _, child in ipairs(character:GetChildren()) do
+					if child:IsA("Tool") and string.find(string.lower(child.Name), "knife", 1, true) then
+						return nil
+					end
+				end
+			end
+		end
+
 		local tbl6
 
 		if v5.Role == "Murderer" then
@@ -8404,10 +8411,7 @@ do
 
 	local function fn14()
 		if ok and result and result.IsMouseLockEnabled then
-			-- Pass `result` as self so the method receives its object correctly.
-			-- Without it the call was equivalent to IsMouseLockEnabled(nil),
-			-- which could return a truthy value unrelated to actual shift-lock state.
-			local ok2, result2 = pcall(result.IsMouseLockEnabled, result)
+			local ok2, result2 = pcall(result.IsMouseLockEnabled)
 			if ok2 and result2 then
 				return true
 			end
@@ -8421,24 +8425,14 @@ do
 			return true
 		end
 
-		-- On touch-only devices, activate aim-assist only when a gun is in hand.
-		-- The previous `fn13() ~= nil` also fired for knives, making aim-assist
-		-- activate the moment ANY tool was equipped, not just the sheriff gun.
 		if UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled then
-			return fn13() == "Gun"
+			return fn13() ~= nil
 		end
 		return false
 	end
 
 	RunService:BindToRenderStep("MarbegShiftLockAim", Enum.RenderPriority.Camera.Value + 20, function()
 		if not _G.ShiftLockAimbotEnabled or not _G.InRound then
-			return
-		end
-
-		-- Do not fight MarbegQuickShotCameraLock (Camera+10) for the camera CFrame.
-		-- That step freezes the camera during rage/wall shots; overriding it here
-		-- caused the camera to snap toward the enemy mid-shot instead of holding.
-		if _G.__QuickShotCameraActive then
 			return
 		end
 
@@ -8685,15 +8679,14 @@ do
 	_G.__ShiftLockCrosshairRequested = false
 
 	_G.ShiftLockCrosshairSetEnabled = function(arg)
+		-- Clear previous connections and unhide old instances
 		local shiftLockHiddenInstances = _G.__ShiftLockHiddenInstances
-
 		for k, shiftLockHiddenInstance in pairs(shiftLockHiddenInstances) do
 			if k and k.Parent then
 				pcall(function()
 					k.Visible = shiftLockHiddenInstance
 				end)
 			end
-
 			shiftLockHiddenInstances[k] = nil
 		end
 
@@ -8702,133 +8695,91 @@ do
 				shiftLockIconConn:Disconnect()
 			end)
 		end
-
 		_G.__ShiftLockIconConns = {}
 
 		pcall(function()
 			RunService:UnbindFromRenderStep("MarbegHideShiftLockCursor")
 		end)
 
+		-- Restore cursor if it was hidden
 		if _G.__ShiftLockCursorHidden then
-			local v5 = localPlayer
-			local mouse
-
-			if localPlayer then
-				mouse = localPlayer:GetMouse()
-			else
-				mouse = v5
-			end
-
+			local mouse = localPlayer:GetMouse()
 			if mouse then
 				pcall(function()
 					mouse.Icon = _G.__ShiftLockSavedCursorIcon or ""
 				end)
 			end
-
 			if _G.__ShiftLockSavedCursorEnabled ~= nil then
 				pcall(function()
 					UserInputService.MouseIconEnabled = _G.__ShiftLockSavedCursorEnabled
 				end)
 			end
-
 			_G.__ShiftLockCursorHidden = false
 		end
 
 		_G.HideShiftLockCrosshair = arg and true or false
 		_G.__ShiftLockCrosshairRequested = _G.HideShiftLockCrosshair
+		
+		-- Only hide if BOTH the custom crosshair is on AND the setting is on
 		if not _G.HideShiftLockCrosshair or not _G.CrosshairEnabled then
 			return
 		end
-		local v5 = localPlayer
-		local mouse
 
-		if localPlayer then
-			mouse = localPlayer:GetMouse()
-		else
-			mouse = v5
-		end
-
+		local mouse = localPlayer:GetMouse()
 		_G.__ShiftLockSavedCursorIcon = mouse and mouse.Icon or ""
 		_G.__ShiftLockSavedCursorEnabled = UserInputService.MouseIconEnabled
 		_G.__ShiftLockCursorHidden = true
 
-		local function fn16()
+		local function forceHideCursor()
 			if mouse then
 				pcall(function()
 					mouse.Icon = ""
 				end)
 			end
-
 			pcall(function()
 				UserInputService.MouseIconEnabled = false
 			end)
 		end
 
-		fn16()
-		RunService:BindToRenderStep("MarbegHideShiftLockCursor", Enum.RenderPriority.Last.Value + 10, fn16)
+		forceHideCursor()
+		RunService:BindToRenderStep("MarbegHideShiftLockCursor", Enum.RenderPriority.Last.Value + 10, forceHideCursor)
 
-		local function fn17(arg2)
-			if not (arg2:IsA("ImageLabel") or arg2:IsA("ImageButton")) then
+		local function hideIndicator(descendant)
+			if not (descendant:IsA("ImageLabel") or descendant:IsA("ImageButton")) then
 				return
 			end
-			local v6 = string.lower(arg2.Name or "")
-			local str = ""
-
+			local name = string.lower(descendant.Name or "")
+			local image = ""
 			pcall(function()
-				str = string.lower(arg2.Image or "")
+				image = string.lower(descendant.Image or "")
 			end)
 
-			-- Name-based: catch all known CoreGui element names for the shift-lock ring.
-			-- Image-based: catch by texture URL keyword OR by known Roblox asset IDs
-			-- for the shift-lock cursor graphic (which Roblox has used across versions).
-			if string.find(v6, "shiftlock", 1, true)
-				or string.find(v6, "mouselock", 1, true)
-				or string.find(v6, "mouse_lock", 1, true)
-				or string.find(v6, "cursorimage", 1, true)
-				or string.find(v6, "mouselockicon", 1, true)
-				or string.find(str, "mouselock", 1, true)
-				or string.find(str, "shiftlock", 1, true)
-				or string.find(str, "mouselockedcursor", 1, true)
-				-- Roblox shift-lock cursor asset IDs (all known variants):
-				or string.find(str, "403729389", 1, true)
-				or string.find(str, "10721394218", 1, true)
-				or string.find(str, "12204747365", 1, true)
-			then
-				shiftLockHiddenInstances[arg2] = arg2.Visible
-				arg2.Visible = false
+			-- Matches Roblox's internal names for the shift lock icon
+			if string.find(name, "shiftlock", 1, true) or string.find(name, "mouselock", 1, true) or string.find(name, "mouse_lock", 1, true) or string.find(name, "cursorimage", 1, true) or string.find(image, "mouselock", 1, true) or string.find(image, "shiftlock", 1, true) or string.find(image, "mouselockedcursor", 1, true) then
+				shiftLockHiddenInstances[descendant] = descendant.Visible
+				descendant.Visible = false
 			end
 		end
 
-		local tbl6 = {}
-
-		local ok2, result2 = pcall(function()
-			return game:GetService("CoreGui")
-		end)
-
-		if ok2 and result2 then
-			table.insert(tbl6, result2)
-		end
-
+		-- Scan CoreGui, PlayerGui, and the UI root
+		local roots = {}
+		local ok2, coreGui = pcall(function() return game:GetService("CoreGui") end)
+		if ok2 and coreGui then table.insert(roots, coreGui) end
+		
 		local playerGui = localPlayer and localPlayer:FindFirstChildOfClass("PlayerGui")
+		if playerGui then table.insert(roots, playerGui) end
+		
+		local ok3, hui = pcall(fn2)
+		if ok3 and hui then table.insert(roots, hui) end
 
-		if playerGui then
-			table.insert(tbl6, playerGui)
-		end
-
-		local ok3, result3 = pcall(fn2)
-
-		if ok3 and result3 then
-			table.insert(tbl6, result3)
-		end
-
-		for _, v6 in ipairs(tbl6) do
-			for _, descendant in ipairs(v6:GetDescendants()) do
-				pcall(fn17, descendant)
+		for _, root in ipairs(roots) do
+			for _, descendant in ipairs(root:GetDescendants()) do
+				pcall(hideIndicator, descendant)
 			end
-
-			table.insert(_G.__ShiftLockIconConns, v6.DescendantAdded:Connect(function(descendant)
+			-- Watch for new shift lock icons spawning
+			table.insert(_G.__ShiftLockIconConns, root.DescendantAdded:Connect(function(descendant)
 				task.defer(function()
-					pcall(fn17, descendant)
+					pcall(hideIndicator, descendant)
 				end)
 			end))
 		end
