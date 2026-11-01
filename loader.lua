@@ -8340,85 +8340,6 @@ do
 
 	_G.__AimEnemyHead = aimEnemyHead
 
-	_G.FOV = _G.FOV or 150 -- This fixes the nil crash
-
-	local fovGui = Instance.new("ScreenGui")
-	fovGui.Name = "MarbegFOVCircle"
-	fovGui.ResetOnSpawn = false
-	fovGui.IgnoreGuiInset = true
-	fovGui.DisplayOrder = 10
-	fovGui.Parent = fn2()
-
-	local fovFrame = Instance.new("Frame")
-	fovFrame.Name = "FOVCircle"
-	fovFrame.BackgroundTransparency = 1
-	fovFrame.BorderSizePixel = 0
-	fovFrame.AnchorPoint = Vector2.new(0.5, 0.5)
-	fovFrame.Position = UDim2.fromScale(0.5, 0.5)
-	fovFrame.Size = UDim2.new(0, _G.FOV * 2, 0, _G.FOV * 2)
-	fovFrame.Parent = fovGui
-
-	local fovCorner = Instance.new("UICorner")
-	fovCorner.CornerRadius = UDim.new(1, 0)
-	fovCorner.Parent = fovFrame
-
-	local fovStroke = Instance.new("UIStroke")
-	fovStroke.Thickness = 2
-	fovStroke.Color = Color3.fromRGB(255, 255, 255)
-	fovStroke.Parent = fovFrame
-
-	_G.UpdateFOVCircle = function()
-		fovFrame.Size = UDim2.new(0, _G.FOV * 2, 0, _G.FOV * 2)
-	end
-
-	_G.SetFOVCircleVisible = function(isVisible)
-		fovFrame.Visible = isVisible
-	end
-
-	RunService.RenderStepped:Connect(function()
-		if fovFrame.Visible then
-			fovStroke.Color = Color3.fromHSV(os.clock() * 0.35 % 1, 1, 1)
-		end
-	end)
-
-	_G.XRayEnabled = false
-	local xrayOriginals = setmetatable({}, { __mode = "k" })
-	local xrayConn = nil
-
-	local function processXRayPart(part)
-		if not _G.XRayEnabled or not part or not part.Parent then return end
-		if part:IsA("BasePart") and part.Transparency < 1 and part.Name ~= "Coin_Server" then
-			if xrayOriginals[part] == nil then
-				xrayOriginals[part] = part.LocalTransparencyModifier
-			end
-			part.LocalTransparencyModifier = 0.72
-		end
-	end
-
-	_G.XRaySetEnabled = function(arg)
-		_G.XRayEnabled = arg and true or false
-
-		if not _G.XRayEnabled then
-			for part, original in pairs(xrayOriginals) do
-				if part and part.Parent then
-					part.LocalTransparencyModifier = original
-				end
-			end
-			xrayOriginals = setmetatable({}, { __mode = "k" })
-			if xrayConn then
-				xrayConn:Disconnect()
-				xrayConn = nil
-			end
-			return
-		end
-
-		for _, descendant in ipairs(workspace:GetDescendants()) do
-			processXRayPart(descendant)
-		end
-
-		xrayConn = workspace.DescendantAdded:Connect(processXRayPart)
-	end
-
 	local function fn13()
 		local character = localPlayer.Character
 		if not character then
@@ -17170,46 +17091,6 @@ do
 		if _G.CameraSettingsReset then
 			pcall(_G.CameraSettingsReset)
 		end
-
-_G.XRayEnabled = false
-local xrayOriginals = setmetatable({}, { __mode = "k" })
-local xrayConn = nil
-
-local function processXRayPart(part)
-	if not _G.XRayEnabled or not part or not part.Parent then return end
-	if part:IsA("BasePart") and part.Transparency < 1 and part.Name ~= "Coin_Server" then
-		if xrayOriginals[part] == nil then
-			xrayOriginals[part] = part.LocalTransparencyModifier
-		end
-		part.LocalTransparencyModifier = 0.72
-	end
-end
-
-_G.XRaySetEnabled = function(arg)
-	_G.XRayEnabled = arg and true or false
-
-	if not _G.XRayEnabled then
-		for part, original in pairs(xrayOriginals) do
-			if part and part.Parent then
-				part.LocalTransparencyModifier = original
-			end
-		end
-		xrayOriginals = setmetatable({}, { __mode = "k" })
-		if xrayConn then
-			xrayConn:Disconnect()
-			xrayConn = nil
-		end
-		return
-	end
-
-	-- Scan existing map
-	for _, descendant in ipairs(workspace:GetDescendants()) do
-		processXRayPart(descendant)
-	end
-
-	-- Listen for new parts
-	xrayConn = workspace.DescendantAdded:Connect(processXRayPart)
-end
 
 		_G.KnifeAuraEnabled = false
 
