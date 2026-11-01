@@ -8299,7 +8299,7 @@ do
 			return nil
 		end
 		
-		-- FIX: If Murderer holds a knife, don't aimlock to Sheriff
+		-- FIX: If we are the Murderer and holding a knife, DO NOT lock the camera to the Sheriff.
 		if v5.Role == "Murderer" then
 			local character = localPlayer.Character
 			if character then
@@ -8650,100 +8650,164 @@ do
 		_G.CrosshairSpinSpeed = math.clamp(tonumber(arg) or 180, 0, 720)
 	end
 
-	RunService:BindToRenderStep("MarbegCrosshair", Enum.RenderPriority.Last.Value, function(deltaTime)
-		-- 1. ALWAYS hide the native shift lock cursor and GUI, regardless of custom crosshair state
-		local mouse = localPlayer:GetMouse()
-		if mouse and mouse.Icon ~= "" then
-			pcall(function() mouse.Icon = "" end)
+	RunService:BindToRenderStep("MarbegCrosshair", Enum.RenderPriority.Last.Value, function(arg)
+		if not _G.CrosshairEnabled then
+			return
 		end
-		if UserInputService.MouseIconEnabled then
-			pcall(function() UserInputService.MouseIconEnabled = false end)
-		end
+		local mouseLocation = UserInputService:GetMouseLocation()
 
-		local currentCamera = workspace.CurrentCamera
-		if not currentCamera then return end
-
-		-- 2. Detect the real Shift Lock state
-		local isShiftLocked = false
-		pcall(function()
-			local settings = UserSettings():GetService("UserGameSettings")
-			isShiftLocked = settings.RotationType == Enum.RotationType.CameraRelative
-		end)
-		
-		-- Fallback detection if settings fail
-		if not isShiftLocked then
-			local head = localPlayer.Character and localPlayer.Character:FindFirstChild("Head")
-			if head and (currentCamera.CFrame.Position - head.Position).Magnitude <= 1.25 then
-				isShiftLocked = true
-			end
+		if UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled then
+			local currentCamera = workspace.CurrentCamera
+			mouseLocation = currentCamera and currentCamera.ViewportSize / 2 or mouseLocation
 		end
 
-		-- 3. Custom Crosshair logic
-		if _G.CrosshairEnabled then
-			if not _G.CrosshairSpinEnabled then
-				frame.Rotation = 0
-			end
+		frame.Position = UDim2.fromOffset(mouseLocation.X, mouseLocation.Y)
 
-			if isShiftLocked then
-				-- Show Custom Crosshair and follow mouse
-				local mouseLoc = UserInputService:GetMouseLocation()
-				if UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled then
-					mouseLoc = currentCamera.ViewportSize / 2
-				end
-				frame.Position = UDim2.fromOffset(mouseLoc.X, mouseLoc.Y)
-				frame.Visible = true
-
-				if _G.CrosshairSpinEnabled then
-					frame.Rotation = (frame.Rotation + _G.CrosshairSpinSpeed * deltaTime) % 360
-				end
-			else
-				-- Hide Custom Crosshair when not in shift lock
-				frame.Visible = false
-			end
+		if _G.CrosshairSpinEnabled then
+			frame.Rotation = (frame.Rotation + _G.CrosshairSpinSpeed * arg) % 360
 		else
-			frame.Visible = false
+			frame.Rotation = 0
 		end
 	end)
 
-		forceHideCursor()
-		RunService:BindToRenderStep("MarbegHideShiftLockCursor", Enum.RenderPriority.Last.Value + 10, forceHideCursor)
+	_G.HideShiftLockCrosshair = false
+	_G.__ShiftLockHiddenInstances = {}
+	_G.__ShiftLockIconConns = {}
+	_G.__ShiftLockCursorHidden = false
+	_G.__ShiftLockSavedCursorIcon = nil
+	_G.__ShiftLockSavedCursorEnabled = nil
+	_G.__ShiftLockCrosshairRequested = false
 
-		local function hideIndicator(descendant)
-			if not (descendant:IsA("ImageLabel") or descendant:IsA("ImageButton")) then
+	_G.ShiftLockCrosshairSetEnabled = function(arg)
+		local shiftLockHiddenInstances = _G.__ShiftLockHiddenInstances
+
+		for k, shiftLockHiddenInstance in pairs(shiftLockHiddenInstances) do
+			if k and k.Parent then
+				pcall(function()
+					k.Visible = shiftLockHiddenInstance
+				end)
+			end
+
+			shiftLockHiddenInstances[k] = nil
+		end
+
+		for _, shiftLockIconConn in ipairs(_G.__ShiftLockIconConns) do
+			pcall(function()
+				shiftLockIconConn:Disconnect()
+			end)
+		end
+
+		_G.__ShiftLockIconConns = {}
+
+		pcall(function()
+			RunService:UnbindFromRenderStep("MarbegHideShiftLockCursor")
+		end)
+
+		if _G.__ShiftLockCursorHidden then
+			local v5 = localPlayer
+			local mouse
+
+			if localPlayer then
+				mouse = localPlayer:GetMouse()
+			else
+				mouse = v5
+			end
+
+			if mouse then
+				pcall(function()
+					mouse.Icon = _G.__ShiftLockSavedCursorIcon or ""
+				end)
+			end
+
+			if _G.__ShiftLockSavedCursorEnabled ~= nil then
+				pcall(function()
+					UserInputService.MouseIconEnabled = _G.__ShiftLockSavedCursorEnabled
+				end)
+			end
+
+			_G.__ShiftLockCursorHidden = false
+		end
+
+		_G.HideShiftLockCrosshair = arg and true or false
+		_G.__ShiftLockCrosshairRequested = _G.HideShiftLockCrosshair
+		if not _G.HideShiftLockCrosshair or not _G.CrosshairEnabled then
+			return
+		end
+		local v5 = localPlayer
+		local mouse
+
+		if localPlayer then
+			mouse = localPlayer:GetMouse()
+		else
+			mouse = v5
+		end
+
+		_G.__ShiftLockSavedCursorIcon = mouse and mouse.Icon or ""
+		_G.__ShiftLockSavedCursorEnabled = UserInputService.MouseIconEnabled
+		_G.__ShiftLockCursorHidden = true
+
+		local function fn16()
+			if mouse then
+				pcall(function()
+					mouse.Icon = ""
+				end)
+			end
+
+			pcall(function()
+				UserInputService.MouseIconEnabled = false
+			end)
+		end
+
+		fn16()
+		RunService:BindToRenderStep("MarbegHideShiftLockCursor", Enum.RenderPriority.Last.Value + 10, fn16)
+
+		local function fn17(arg2)
+			if not (arg2:IsA("ImageLabel") or arg2:IsA("ImageButton")) then
 				return
 			end
-			local name = string.lower(descendant.Name or "")
-			local image = ""
+			local v6 = string.lower(arg2.Name or "")
+			local str = ""
+
 			pcall(function()
-				image = string.lower(descendant.Image or "")
+				str = string.lower(arg2.Image or "")
 			end)
 
-			-- Matches Roblox's internal names for the shift lock icon
-			if string.find(name, "shiftlock", 1, true) or string.find(name, "mouselock", 1, true) or string.find(name, "mouse_lock", 1, true) or string.find(name, "cursorimage", 1, true) or string.find(image, "mouselock", 1, true) or string.find(image, "shiftlock", 1, true) or string.find(image, "mouselockedcursor", 1, true) then
-				shiftLockHiddenInstances[descendant] = descendant.Visible
-				descendant.Visible = false
+			if string.find(v6, "shiftlock", 1, true) or string.find(v6, "mouselock", 1, true) or string.find(v6, "mouse_lock", 1, true) or string.find(v6, "cursorimage", 1, true) or string.find(str, "mouselock", 1, true) or string.find(str, "shiftlock", 1, true) or string.find(str, "mouselockedcursor", 1, true) then
+				shiftLockHiddenInstances[arg2] = arg2.Visible
+				arg2.Visible = false
 			end
 		end
 
-		-- Scan CoreGui, PlayerGui, and the UI root
-		local roots = {}
-		local ok2, coreGui = pcall(function() return game:GetService("CoreGui") end)
-		if ok2 and coreGui then table.insert(roots, coreGui) end
-		
-		local playerGui = localPlayer and localPlayer:FindFirstChildOfClass("PlayerGui")
-		if playerGui then table.insert(roots, playerGui) end
-		
-		local ok3, hui = pcall(fn2)
-		if ok3 and hui then table.insert(roots, hui) end
+		local tbl6 = {}
 
-		for _, root in ipairs(roots) do
-			for _, descendant in ipairs(root:GetDescendants()) do
-				pcall(hideIndicator, descendant)
+		local ok2, result2 = pcall(function()
+			return game:GetService("CoreGui")
+		end)
+
+		if ok2 and result2 then
+			table.insert(tbl6, result2)
+		end
+
+		local playerGui = localPlayer and localPlayer:FindFirstChildOfClass("PlayerGui")
+
+		if playerGui then
+			table.insert(tbl6, playerGui)
+		end
+
+		local ok3, result3 = pcall(fn2)
+
+		if ok3 and result3 then
+			table.insert(tbl6, result3)
+		end
+
+		for _, v6 in ipairs(tbl6) do
+			for _, descendant in ipairs(v6:GetDescendants()) do
+				pcall(fn17, descendant)
 			end
-			-- Watch for new shift lock icons spawning
-			table.insert(_G.__ShiftLockIconConns, root.DescendantAdded:Connect(function(descendant)
+
+			table.insert(_G.__ShiftLockIconConns, v6.DescendantAdded:Connect(function(descendant)
 				task.defer(function()
-					pcall(hideIndicator, descendant)
+					pcall(fn17, descendant)
 				end)
 			end))
 		end
