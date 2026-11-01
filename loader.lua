@@ -3373,6 +3373,9 @@ do
 		end)
 
 		if currentCamera and cFrame then
+			-- Signal that the camera is locked for this shot so MarbegShiftLockAim
+			-- yields and does not fight this step for the camera CFrame.
+			_G.__QuickShotCameraActive = true
 			RunService:BindToRenderStep("MarbegQuickShotCameraLock", Enum.RenderPriority.Camera.Value + 10, function()
 				if workspace.CurrentCamera then
 					workspace.CurrentCamera.CFrame = cFrame
@@ -3384,6 +3387,9 @@ do
 			pcall(function()
 				RunService:UnbindFromRenderStep("MarbegQuickShotCameraLock")
 			end)
+
+			-- Camera lock released — ShiftLockAim may resume.
+			_G.__QuickShotCameraActive = false
 
 			for k, v5 in pairs(tbl5) do
 				if k.Parent then
@@ -8298,19 +8304,6 @@ do
 		if not v5 or not v5.Role or v5.Dead then
 			return nil
 		end
-		
-		-- FIX: If we are the Murderer and holding a knife, DO NOT lock the camera to the Sheriff.
-		if v5.Role == "Murderer" then
-			local character = localPlayer.Character
-			if character then
-				for _, child in ipairs(character:GetChildren()) do
-					if child:IsA("Tool") and string.find(string.lower(child.Name), "knife", 1, true) then
-						return nil
-					end
-				end
-			end
-		end
-
 		local tbl6
 
 		if v5.Role == "Murderer" then
@@ -8411,7 +8404,10 @@ do
 
 	local function fn14()
 		if ok and result and result.IsMouseLockEnabled then
-			local ok2, result2 = pcall(result.IsMouseLockEnabled)
+			-- Pass `result` as self so the method receives its object correctly.
+			-- Without it the call was equivalent to IsMouseLockEnabled(nil),
+			-- which could return a truthy value unrelated to actual shift-lock state.
+			local ok2, result2 = pcall(result.IsMouseLockEnabled, result)
 			if ok2 and result2 then
 				return true
 			end
@@ -8425,14 +8421,24 @@ do
 			return true
 		end
 
+		-- On touch-only devices, activate aim-assist only when a gun is in hand.
+		-- The previous `fn13() ~= nil` also fired for knives, making aim-assist
+		-- activate the moment ANY tool was equipped, not just the sheriff gun.
 		if UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled then
-			return fn13() ~= nil
+			return fn13() == "Gun"
 		end
 		return false
 	end
 
 	RunService:BindToRenderStep("MarbegShiftLockAim", Enum.RenderPriority.Camera.Value + 20, function()
 		if not _G.ShiftLockAimbotEnabled or not _G.InRound then
+			return
+		end
+
+		-- Do not fight MarbegQuickShotCameraLock (Camera+10) for the camera CFrame.
+		-- That step freezes the camera during rage/wall shots; overriding it here
+		-- caused the camera to snap toward the enemy mid-shot instead of holding.
+		if _G.__QuickShotCameraActive then
 			return
 		end
 
@@ -8772,7 +8778,22 @@ do
 				str = string.lower(arg2.Image or "")
 			end)
 
-			if string.find(v6, "shiftlock", 1, true) or string.find(v6, "mouselock", 1, true) or string.find(v6, "mouse_lock", 1, true) or string.find(v6, "cursorimage", 1, true) or string.find(str, "mouselock", 1, true) or string.find(str, "shiftlock", 1, true) or string.find(str, "mouselockedcursor", 1, true) then
+			-- Name-based: catch all known CoreGui element names for the shift-lock ring.
+			-- Image-based: catch by texture URL keyword OR by known Roblox asset IDs
+			-- for the shift-lock cursor graphic (which Roblox has used across versions).
+			if string.find(v6, "shiftlock", 1, true)
+				or string.find(v6, "mouselock", 1, true)
+				or string.find(v6, "mouse_lock", 1, true)
+				or string.find(v6, "cursorimage", 1, true)
+				or string.find(v6, "mouselockicon", 1, true)
+				or string.find(str, "mouselock", 1, true)
+				or string.find(str, "shiftlock", 1, true)
+				or string.find(str, "mouselockedcursor", 1, true)
+				-- Roblox shift-lock cursor asset IDs (all known variants):
+				or string.find(str, "403729389", 1, true)
+				or string.find(str, "10721394218", 1, true)
+				or string.find(str, "12204747365", 1, true)
+			then
 				shiftLockHiddenInstances[arg2] = arg2.Visible
 				arg2.Visible = false
 			end
