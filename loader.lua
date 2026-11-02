@@ -8895,9 +8895,9 @@ do
 			screenGui.Enabled = shouldShow
 		end
 
-		if shouldShow then
-			scanAndHideOriginalCenterIndicator()
-		end
+		-- Do not rescan CoreGui/PlayerGui descendants every rendered frame.
+		-- The initial scan runs when the visual state activates, and newly-added
+		-- descendants are handled by the existing DescendantAdded connections.
 	end
 
 	_G.ShiftLockCrosshairSetEnabled = function(arg)
