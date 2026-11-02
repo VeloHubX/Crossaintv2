@@ -8388,15 +8388,120 @@ do
 
 	_G.__SilentThrowTarget = silentThrowTarget
 
-	-- NORMAL CAMERA FIX
-	-- Do not rotate the camera toward another player. Roblox's default camera
-	-- continues to handle normal camera movement, Shift Lock, and first person.
-	_G.ShiftLockAimbotEnabled = false
+	-- Sheriff/Hero camera aim lock. Roblox's camera controller remains in control;
+	-- this only adjusts the camera while the Aimlock toggle and a supported camera
+	-- mode are both active. Camera/character references are refreshed every frame.
 	_G.__QuickShotCameraActive = false
 
 	pcall(function()
 		RunService:UnbindFromRenderStep("MarbegShiftLockAim")
 	end)
+
+	local function getSheriffAimTarget(camera)
+		local playerData = CurrentRoundClient and CurrentRoundClient.PlayerData
+		local ownData = playerData and playerData[localPlayer.Name]
+		if not ownData or ownData.Dead then
+			return nil
+		end
+
+		local ownRole = ownData.Role
+		if ownRole == "Innocent" and type(_G.__IsHeroNow) == "function" then
+			local heroOk, isHero = pcall(_G.__IsHeroNow, localPlayer)
+			if heroOk and isHero then
+				ownRole = "Hero"
+			end
+		end
+		if ownRole ~= "Sheriff" and ownRole ~= "Hero" then
+			return nil
+		end
+
+		local bestPart = nil
+		local bestAngle = math.huge
+		for _, player in ipairs(Players:GetPlayers()) do
+			if player ~= localPlayer then
+				local data = playerData[player.Name]
+				if data and data.Role == "Murderer" and not data.Dead then
+					local targetCharacter = player.Character
+					local humanoid = targetCharacter and targetCharacter:FindFirstChildWhichIsA("Humanoid")
+					local head = targetCharacter and (targetCharacter:FindFirstChild("Head") or targetCharacter:FindFirstChild("HumanoidRootPart"))
+					if head and head:IsA("BasePart") and humanoid and humanoid.Health > 0 then
+						local direction = head.Position - camera.CFrame.Position
+						if direction.Magnitude > 0.001 then
+							local dot = math.clamp(camera.CFrame.LookVector:Dot(direction.Unit), -1, 1)
+							local angle = math.acos(dot)
+							if angle < bestAngle then
+								bestAngle = angle
+								bestPart = head
+							end
+						end
+					end
+				end
+			end
+		end
+		return bestPart
+	end
+
+	local function isFirstPerson(camera, character)
+		if localPlayer.CameraMode == Enum.CameraMode.LockFirstPerson then
+			return true
+		end
+
+		local head = character and character:FindFirstChild("Head")
+		if not head or not head:IsA("BasePart") then
+			return false
+		end
+
+		-- Roblox's first-person camera sits very close to the character's head.
+		return (camera.CFrame.Position - head.Position).Magnitude <= 1.25
+	end
+
+	local function isShiftLocked()
+		-- LockCenter is the runtime state used by Roblox's built-in Shift Lock.
+		-- Do not infer Shift Lock from the user's key press: the setting can be
+		-- disabled, remapped, or changed by Roblox's camera controller.
+		return UserInputService.MouseBehavior == Enum.MouseBehavior.LockCenter
+	end
+
+	local function updateShiftLockAim()
+		if not _G.ShiftLockAimbotEnabled then
+			return
+		end
+
+		local camera = workspace.CurrentCamera
+		local character = localPlayer.Character
+		if not camera or not character or camera.CameraType ~= Enum.CameraType.Custom then
+			return
+		end
+		if UserInputService:GetFocusedTextBox() then
+			return
+		end
+
+		local firstPerson = isFirstPerson(camera, character)
+		local shiftLocked = isShiftLocked()
+		if not firstPerson and not shiftLocked then
+			return
+		end
+
+		local target = getSheriffAimTarget(camera)
+		if target and target.Parent then
+			camera.CFrame = CFrame.lookAt(camera.CFrame.Position, target.Position)
+		end
+	end
+
+	_G.ShiftLockAimbotSetEnabled = function(enabled)
+		_G.ShiftLockAimbotEnabled = enabled == true
+		pcall(function()
+			RunService:UnbindFromRenderStep("MarbegShiftLockAim")
+		end)
+
+		if _G.ShiftLockAimbotEnabled then
+			RunService:BindToRenderStep(
+				"MarbegShiftLockAim",
+				Enum.RenderPriority.Last.Value + 1,
+				updateShiftLockAim
+			)
+		end
+	end
 
 	if ok and result and type(result.GetMouseTargetCFrame) == "function" then
 		_G.__RealGetMouseTarget = _G.__RealGetMouseTarget or result.GetMouseTargetCFrame
@@ -8843,14 +8948,6 @@ do
 				end
 			end
 		end
-	end)
-end
-
-_G.ShiftLockAimbotSetEnabled = function()
-	-- Camera targeting is disabled so Roblox's normal camera remains in control.
-	_G.ShiftLockAimbotEnabled = false
-	pcall(function()
-		RunService:UnbindFromRenderStep("MarbegShiftLockAim")
 	end)
 end
 
