@@ -8522,6 +8522,7 @@ do
 	local frame = Instance.new("Frame")
 	frame.Name = "CrosshairRoot"
 	frame.AnchorPoint = Vector2.new(0.5, 0.5)
+	frame.Position = UDim2.fromScale(0.5, 0.5)
 	frame.Size = UDim2.fromOffset(1, 1)
 	frame.BackgroundTransparency = 1
 	frame.BorderSizePixel = 0
@@ -8592,21 +8593,15 @@ do
 		_G.CrosshairSpinSpeed = math.clamp(tonumber(arg) or 180, 0, 720)
 	end
 
-	RunService:BindToRenderStep("MarbegCrosshair", Enum.RenderPriority.Last.Value, function(arg)
+	-- Keep the root anchored to the viewport center. Scale-based positioning
+	-- automatically follows viewport resizing and is independent of mouse input.
+	RunService:BindToRenderStep("MarbegCrosshair", Enum.RenderPriority.Last.Value, function(deltaTime)
 		if not _G.CrosshairEnabled then
 			return
 		end
-		local mouseLocation = UserInputService:GetMouseLocation()
-
-		if UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled then
-			local currentCamera = workspace.CurrentCamera
-			mouseLocation = currentCamera and currentCamera.ViewportSize / 2 or mouseLocation
-		end
-
-		frame.Position = UDim2.fromOffset(mouseLocation.X, mouseLocation.Y)
 
 		if _G.CrosshairSpinEnabled then
-			frame.Rotation = (frame.Rotation + _G.CrosshairSpinSpeed * arg) % 360
+			frame.Rotation = (frame.Rotation + _G.CrosshairSpinSpeed * deltaTime) % 360
 		else
 			frame.Rotation = 0
 		end
