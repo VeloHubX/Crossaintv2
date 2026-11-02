@@ -8585,7 +8585,7 @@ do
 	end
 
 	_G.TriggerbotReady = false
-	_G.CrosshairEnabled = false
+	_G.CrosshairEnabled = true
 	_G.CrosshairDecalId = "1827745864"
 	_G.CrosshairSize = 64
 	_G.CrosshairSpinEnabled = false
@@ -8620,7 +8620,7 @@ do
 	screenGui.ResetOnSpawn = false
 	screenGui.IgnoreGuiInset = true
 	screenGui.DisplayOrder = 160
-	screenGui.Enabled = false
+	screenGui.Enabled = true
 	screenGui.Parent = fn2()
 	_G.TriggerMarkerGui = screenGui
 	_G.CrosshairGui = screenGui
@@ -8712,7 +8712,7 @@ do
 		end
 	end)
 
-	_G.HideShiftLockCrosshair = false
+	_G.HideShiftLockCrosshair = true
 	_G.__ShiftLockHiddenInstances = {}
 	_G.__ShiftLockIconConns = {}
 	_G.__ShiftLockCursorHidden = false
@@ -8804,7 +8804,7 @@ do
 		RunService:BindToRenderStep("MarbegHideShiftLockCursor", Enum.RenderPriority.Last.Value + 10, fn16)
 
 		local function fn17(arg2)
-			if not (arg2:IsA("ImageLabel") or arg2:IsA("ImageButton")) then
+			if not arg2:IsA("GuiObject") then
 				return
 			end
 			local v6 = string.lower(arg2.Name or "")
@@ -8818,6 +8818,10 @@ do
 			-- Image-based: catch by texture URL keyword OR by known Roblox asset IDs
 			-- for the shift-lock cursor graphic (which Roblox has used across versions).
 			if string.find(v6, "shiftlock", 1, true)
+				or string.find(v6, "shift_lock", 1, true)
+				or string.find(v6, "shift-lock", 1, true)
+				or string.find(v6, "shiftlockbutton", 1, true)
+				or string.find(v6, "mouse_lock_button", 1, true)
 				or string.find(v6, "mouselock", 1, true)
 				or string.find(v6, "mouse_lock", 1, true)
 				or string.find(v6, "cursorimage", 1, true)
@@ -16813,6 +16817,7 @@ _G.BuildCrosshairPicker = function()
 	tbl6.Toggle(v38, {
 		Title = "Enable Crosshair",
 		Flag = "CrosshairEnabled",
+		Value = true,
 		Set = "CrosshairSetEnabled",
 		Notify = "crosshair",
 	})
@@ -16842,6 +16847,7 @@ _G.BuildCrosshairPicker = function()
 	tbl6.Toggle(v38, {
 		Title = "Hide Shift Lock Crosshair",
 		Flag = "HideShiftLockCrosshair",
+		Value = true,
 		Set = "ShiftLockCrosshairSetEnabled",
 		Notify = "eye-off",
 	})
@@ -17721,8 +17727,11 @@ _G.RoleESPSetTypeEnabled("Innocent", true)
 _G.RoleESPSetTypeEnabled("Hero", true)
 loadScriptConfig(false)
 
+-- Replace Roblox's original Shift Lock indicator with the custom crosshair.
+-- This only changes the visual UI; native Shift Lock camera behavior remains intact.
 pcall(function()
-	_G.ShiftLockCrosshairSetEnabled(_G.HideShiftLockCrosshair)
+	_G.CrosshairSetEnabled(true)
+	_G.ShiftLockCrosshairSetEnabled(true)
 end)
 
 pcall(function()
