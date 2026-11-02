@@ -8831,15 +8831,35 @@ do
 		end
 	end
 
+	local shiftLockScanGeneration = 0
 	local function scanAndHideOriginalCenterIndicator()
-		for _, root in ipairs(shiftLockGuiRoots) do
-			pcall(function()
-				for _, descendant in ipairs(root:GetDescendants()) do
-					restoreShiftLockButton(descendant)
-					hideOriginalCenterIndicator(descendant)
+		-- Do the one-time CoreGui/PlayerGui scan off the render thread and in
+		-- small batches. The previous synchronous GetDescendants loops could
+		-- stall the first frame when Shift Lock was toggled on.
+		shiftLockScanGeneration += 1
+		local generation = shiftLockScanGeneration
+		task.spawn(function()
+			for _, root in ipairs(shiftLockGuiRoots) do
+				if generation ~= shiftLockScanGeneration or not _G.__ShiftLockVisualActive then
+					return
 				end
-			end)
-		end
+				local ok, descendants = pcall(function()
+					return root:GetDescendants()
+				end)
+				if ok and descendants then
+					for index, descendant in ipairs(descendants) do
+						if generation ~= shiftLockScanGeneration or not _G.__ShiftLockVisualActive then
+							return
+						end
+						pcall(restoreShiftLockButton, descendant)
+						pcall(hideOriginalCenterIndicator, descendant)
+						if index % 150 == 0 then
+							task.wait()
+						end
+					end
+				end
+			end
+		end)
 	end
 
 	local function setShiftLockVisualActive(active)
@@ -8891,9 +8911,8 @@ do
 			and isCrosshairCameraModeActive()
 		setShiftLockVisualActive(shouldShow)
 
-		if screenGui and screenGui.Parent then
-			screenGui.Enabled = shouldShow
-		end
+		-- setShiftLockVisualActive updates the GUI only when the state changes.
+		-- Avoid writing the same Enabled property again on every rendered frame.
 
 		-- Do not rescan CoreGui/PlayerGui descendants every rendered frame.
 		-- The initial scan runs when the visual state activates, and newly-added
@@ -8925,12 +8944,6 @@ do
 
 		shiftLockGuiRoots = getShiftLockGuiRoots()
 		for _, root in ipairs(shiftLockGuiRoots) do
-			pcall(function()
-				for _, descendant in ipairs(root:GetDescendants()) do
-					restoreShiftLockButton(descendant)
-				end
-			end)
-
 			table.insert(_G.__ShiftLockIconConns, root.DescendantAdded:Connect(function(descendant)
 				task.defer(function()
 					pcall(restoreShiftLockButton, descendant)
