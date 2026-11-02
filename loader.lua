@@ -3476,16 +3476,18 @@ do
 						local n4 = v12.Position + v14
 						local tbl7 = flag2 and { n4 + predictionLeadFor2, n4 } or { n4 }
 						local exitTo = nil
+						local clearedPosition = nil
 
 						for _, v15 in ipairs(tbl7) do
 							if _G.__ClearGunShot(v10, character, v15, character2) then
 								exitTo = 1
+								clearedPosition = v15
 								break
 							end
 						end
 
 						if exitTo == 1 then
-							tbl5[#tbl5 + 1] = n4
+							tbl5[#tbl5 + 1] = clearedPosition or n4
 							if (arg or 5) <= #tbl5 then
 								return tbl5
 							end
