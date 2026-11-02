@@ -3373,9 +3373,6 @@ do
 		end)
 
 		if currentCamera and cFrame then
-			-- Signal that the camera is locked for this shot so MarbegShiftLockAim
-			-- yields and does not fight this step for the camera CFrame.
-			_G.__QuickShotCameraActive = true
 			RunService:BindToRenderStep("MarbegQuickShotCameraLock", Enum.RenderPriority.Camera.Value + 10, function()
 				if workspace.CurrentCamera then
 					workspace.CurrentCamera.CFrame = cFrame
@@ -3387,9 +3384,6 @@ do
 			pcall(function()
 				RunService:UnbindFromRenderStep("MarbegQuickShotCameraLock")
 			end)
-
-			-- Camera lock released — ShiftLockAim may resume.
-			_G.__QuickShotCameraActive = false
 
 			for k, v5 in pairs(tbl5) do
 				if k.Parent then
@@ -8304,6 +8298,19 @@ do
 		if not v5 or not v5.Role or v5.Dead then
 			return nil
 		end
+		
+		-- FIX: If we are the Murderer and holding a knife, DO NOT lock the camera to the Sheriff.
+		if v5.Role == "Murderer" then
+			local character = localPlayer.Character
+			if character then
+				for _, child in ipairs(character:GetChildren()) do
+					if child:IsA("Tool") and string.find(string.lower(child.Name), "knife", 1, true) then
+						return nil
+					end
+				end
+			end
+		end
+
 		local tbl6
 
 		if v5.Role == "Murderer" then
@@ -8332,6 +8339,85 @@ do
 	end
 
 	_G.__AimEnemyHead = aimEnemyHead
+
+	_G.FOV = _G.FOV or 150 -- This fixes the nil crash
+
+	local fovGui = Instance.new("ScreenGui")
+	fovGui.Name = "MarbegFOVCircle"
+	fovGui.ResetOnSpawn = false
+	fovGui.IgnoreGuiInset = true
+	fovGui.DisplayOrder = 10
+	fovGui.Parent = fn2()
+
+	local fovFrame = Instance.new("Frame")
+	fovFrame.Name = "FOVCircle"
+	fovFrame.BackgroundTransparency = 1
+	fovFrame.BorderSizePixel = 0
+	fovFrame.AnchorPoint = Vector2.new(0.5, 0.5)
+	fovFrame.Position = UDim2.fromScale(0.5, 0.5)
+	fovFrame.Size = UDim2.new(0, _G.FOV * 2, 0, _G.FOV * 2)
+	fovFrame.Parent = fovGui
+
+	local fovCorner = Instance.new("UICorner")
+	fovCorner.CornerRadius = UDim.new(1, 0)
+	fovCorner.Parent = fovFrame
+
+	local fovStroke = Instance.new("UIStroke")
+	fovStroke.Thickness = 2
+	fovStroke.Color = Color3.fromRGB(255, 255, 255)
+	fovStroke.Parent = fovFrame
+
+	_G.UpdateFOVCircle = function()
+		fovFrame.Size = UDim2.new(0, _G.FOV * 2, 0, _G.FOV * 2)
+	end
+
+	_G.SetFOVCircleVisible = function(isVisible)
+		fovFrame.Visible = isVisible
+	end
+
+	RunService.RenderStepped:Connect(function()
+		if fovFrame.Visible then
+			fovStroke.Color = Color3.fromHSV(os.clock() * 0.35 % 1, 1, 1)
+		end
+	end)
+
+	_G.XRayEnabled = false
+	local xrayOriginals = setmetatable({}, { __mode = "k" })
+	local xrayConn = nil
+
+	local function processXRayPart(part)
+		if not _G.XRayEnabled or not part or not part.Parent then return end
+		if part:IsA("BasePart") and part.Transparency < 1 and part.Name ~= "Coin_Server" then
+			if xrayOriginals[part] == nil then
+				xrayOriginals[part] = part.LocalTransparencyModifier
+			end
+			part.LocalTransparencyModifier = 0.72
+		end
+	end
+
+	_G.XRaySetEnabled = function(arg)
+		_G.XRayEnabled = arg and true or false
+
+		if not _G.XRayEnabled then
+			for part, original in pairs(xrayOriginals) do
+				if part and part.Parent then
+					part.LocalTransparencyModifier = original
+				end
+			end
+			xrayOriginals = setmetatable({}, { __mode = "k" })
+			if xrayConn then
+				xrayConn:Disconnect()
+				xrayConn = nil
+			end
+			return
+		end
+
+		for _, descendant in ipairs(workspace:GetDescendants()) do
+			processXRayPart(descendant)
+		end
+
+		xrayConn = workspace.DescendantAdded:Connect(processXRayPart)
+	end
 
 	local function fn13()
 		local character = localPlayer.Character
@@ -8404,10 +8490,7 @@ do
 
 	local function fn14()
 		if ok and result and result.IsMouseLockEnabled then
-			-- Pass `result` as self so the method receives its object correctly.
-			-- Without it the call was equivalent to IsMouseLockEnabled(nil),
-			-- which could return a truthy value unrelated to actual shift-lock state.
-			local ok2, result2 = pcall(result.IsMouseLockEnabled, result)
+			local ok2, result2 = pcall(result.IsMouseLockEnabled)
 			if ok2 and result2 then
 				return true
 			end
@@ -8421,24 +8504,14 @@ do
 			return true
 		end
 
-		-- On touch-only devices, activate aim-assist only when a gun is in hand.
-		-- The previous `fn13() ~= nil` also fired for knives, making aim-assist
-		-- activate the moment ANY tool was equipped, not just the sheriff gun.
 		if UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled then
-			return fn13() == "Gun"
+			return fn13() ~= nil
 		end
 		return false
 	end
 
 	RunService:BindToRenderStep("MarbegShiftLockAim", Enum.RenderPriority.Camera.Value + 20, function()
 		if not _G.ShiftLockAimbotEnabled or not _G.InRound then
-			return
-		end
-
-		-- Do not fight MarbegQuickShotCameraLock (Camera+10) for the camera CFrame.
-		-- That step freezes the camera during rage/wall shots; overriding it here
-		-- caused the camera to snap toward the enemy mid-shot instead of holding.
-		if _G.__QuickShotCameraActive then
 			return
 		end
 
@@ -8778,22 +8851,7 @@ do
 				str = string.lower(arg2.Image or "")
 			end)
 
-			-- Name-based: catch all known CoreGui element names for the shift-lock ring.
-			-- Image-based: catch by texture URL keyword OR by known Roblox asset IDs
-			-- for the shift-lock cursor graphic (which Roblox has used across versions).
-			if string.find(v6, "shiftlock", 1, true)
-				or string.find(v6, "mouselock", 1, true)
-				or string.find(v6, "mouse_lock", 1, true)
-				or string.find(v6, "cursorimage", 1, true)
-				or string.find(v6, "mouselockicon", 1, true)
-				or string.find(str, "mouselock", 1, true)
-				or string.find(str, "shiftlock", 1, true)
-				or string.find(str, "mouselockedcursor", 1, true)
-				-- Roblox shift-lock cursor asset IDs (all known variants):
-				or string.find(str, "403729389", 1, true)
-				or string.find(str, "10721394218", 1, true)
-				or string.find(str, "12204747365", 1, true)
-			then
+			if string.find(v6, "shiftlock", 1, true) or string.find(v6, "mouselock", 1, true) or string.find(v6, "mouse_lock", 1, true) or string.find(v6, "cursorimage", 1, true) or string.find(str, "mouselock", 1, true) or string.find(str, "shiftlock", 1, true) or string.find(str, "mouselockedcursor", 1, true) then
 				shiftLockHiddenInstances[arg2] = arg2.Visible
 				arg2.Visible = false
 			end
@@ -17112,6 +17170,46 @@ do
 		if _G.CameraSettingsReset then
 			pcall(_G.CameraSettingsReset)
 		end
+
+_G.XRayEnabled = false
+local xrayOriginals = setmetatable({}, { __mode = "k" })
+local xrayConn = nil
+
+local function processXRayPart(part)
+	if not _G.XRayEnabled or not part or not part.Parent then return end
+	if part:IsA("BasePart") and part.Transparency < 1 and part.Name ~= "Coin_Server" then
+		if xrayOriginals[part] == nil then
+			xrayOriginals[part] = part.LocalTransparencyModifier
+		end
+		part.LocalTransparencyModifier = 0.72
+	end
+end
+
+_G.XRaySetEnabled = function(arg)
+	_G.XRayEnabled = arg and true or false
+
+	if not _G.XRayEnabled then
+		for part, original in pairs(xrayOriginals) do
+			if part and part.Parent then
+				part.LocalTransparencyModifier = original
+			end
+		end
+		xrayOriginals = setmetatable({}, { __mode = "k" })
+		if xrayConn then
+			xrayConn:Disconnect()
+			xrayConn = nil
+		end
+		return
+	end
+
+	-- Scan existing map
+	for _, descendant in ipairs(workspace:GetDescendants()) do
+		processXRayPart(descendant)
+	end
+
+	-- Listen for new parts
+	xrayConn = workspace.DescendantAdded:Connect(processXRayPart)
+end
 
 		_G.KnifeAuraEnabled = false
 
