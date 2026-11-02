@@ -3330,7 +3330,6 @@ do
 
 	local function fn16(arg, arg2)
 		local currentCamera = workspace.CurrentCamera
-		local cFrame = currentCamera and currentCamera.CFrame
 		local tbl5 = {}
 		local clone = nil
 		local archivable = arg.Archivable
@@ -3368,20 +3367,11 @@ do
 			end
 		end
 
+		-- NORMAL CAMERA FIX: ensure no previous quick-shot camera lock remains.
 		pcall(function()
 			RunService:UnbindFromRenderStep("MarbegQuickShotCameraLock")
 		end)
-
-		if currentCamera and cFrame then
-			-- Signal that the camera is locked for this shot so MarbegShiftLockAim
-			-- yields and does not fight this step for the camera CFrame.
-			_G.__QuickShotCameraActive = true
-			RunService:BindToRenderStep("MarbegQuickShotCameraLock", Enum.RenderPriority.Camera.Value + 10, function()
-				if workspace.CurrentCamera then
-					workspace.CurrentCamera.CFrame = cFrame
-				end
-			end)
-		end
+		_G.__QuickShotCameraActive = false
 
 		return function()
 			pcall(function()
@@ -3405,11 +3395,7 @@ do
 				end)
 			end
 
-			if currentCamera and cFrame then
-				pcall(function()
-					currentCamera.CFrame = cFrame
-				end)
-			end
+			-- Intentionally do not overwrite CurrentCamera.CFrame.
 		end
 	end
 
@@ -8402,64 +8388,14 @@ do
 
 	_G.__SilentThrowTarget = silentThrowTarget
 
-	local function fn14()
-		if ok and result and result.IsMouseLockEnabled then
-			-- Pass `result` as self so the method receives its object correctly.
-			-- Without it the call was equivalent to IsMouseLockEnabled(nil),
-			-- which could return a truthy value unrelated to actual shift-lock state.
-			local ok2, result2 = pcall(result.IsMouseLockEnabled, result)
-			if ok2 and result2 then
-				return true
-			end
-		end
+	-- NORMAL CAMERA FIX
+	-- Do not rotate the camera toward another player. Roblox's default camera
+	-- continues to handle normal camera movement, Shift Lock, and first person.
+	_G.ShiftLockAimbotEnabled = false
+	_G.__QuickShotCameraActive = false
 
-		return UserInputService.MouseBehavior == Enum.MouseBehavior.LockCenter
-	end
-
-	local function fn15()
-		if fn14() then
-			return true
-		end
-
-		-- On touch-only devices, activate aim-assist only when a gun is in hand.
-		-- The previous `fn13() ~= nil` also fired for knives, making aim-assist
-		-- activate the moment ANY tool was equipped, not just the sheriff gun.
-		if UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled then
-			return fn13() == "Gun"
-		end
-		return false
-	end
-
-	RunService:BindToRenderStep("MarbegShiftLockAim", Enum.RenderPriority.Camera.Value + 20, function()
-		if not _G.ShiftLockAimbotEnabled or not _G.InRound then
-			return
-		end
-
-		-- Do not fight MarbegQuickShotCameraLock (Camera+10) for the camera CFrame.
-		-- That step freezes the camera during rage/wall shots; overriding it here
-		-- caused the camera to snap toward the enemy mid-shot instead of holding.
-		if _G.__QuickShotCameraActive then
-			return
-		end
-
-		if not fn15() then
-			return
-		end
-		local v5 = aimEnemyHead()
-		if not v5 then
-			return
-		end
-		local currentCamera = workspace.CurrentCamera
-		if not currentCamera then
-			return
-		end
-		local position = v5.Position
-
-		if _G.__PredictionLeadFor then
-			position += _G.__PredictionLeadFor(v5.Parent and v5.Parent:FindFirstChild("HumanoidRootPart"), currentCamera.CFrame.Position)
-		end
-
-		currentCamera.CFrame = currentCamera.CFrame:Lerp(CFrame.lookAt(currentCamera.CFrame.Position, position), 0.4)
+	pcall(function()
+		RunService:UnbindFromRenderStep("MarbegShiftLockAim")
 	end)
 
 	if ok and result and type(result.GetMouseTargetCFrame) == "function" then
@@ -8915,8 +8851,12 @@ do
 	end)
 end
 
-_G.ShiftLockAimbotSetEnabled = function(arg)
-	_G.ShiftLockAimbotEnabled = arg and true or false
+_G.ShiftLockAimbotSetEnabled = function()
+	-- Camera targeting is disabled so Roblox's normal camera remains in control.
+	_G.ShiftLockAimbotEnabled = false
+	pcall(function()
+		RunService:UnbindFromRenderStep("MarbegShiftLockAim")
+	end)
 end
 
 _G.SilentAimSetEnabled = function(arg)
