@@ -8755,16 +8755,27 @@ do
 			image = string.lower(instance.Image or "")
 		end)
 
-		-- Match only the center cursor graphic. Do not match MouseLockButton,
-		-- ShiftLockButton, or other clickable controls in the top bar.
-		return string.find(name, "cursorimage", 1, true) ~= nil
+		-- Match the non-clickable center cursor graphic by its common Roblox
+		-- names or image asset. GuiButtons are excluded so the top Shift Lock
+		-- toggle and its clickable hitbox remain available.
+		local isCenterCursorName =
+			string.find(name, "cursorimage", 1, true) ~= nil
 			or string.find(name, "mouselockedcursor", 1, true) ~= nil
-			or string.find(image, "mouselock", 1, true) ~= nil
+			or string.find(name, "mouselockcursor", 1, true) ~= nil
+			or string.find(name, "shiftlockcursor", 1, true) ~= nil
+			or string.find(name, "mouselocklabel", 1, true) ~= nil
+			or string.find(name, "shiftlocklabel", 1, true) ~= nil
+			or string.find(name, "lockcursor", 1, true) ~= nil
+
+		local isCenterCursorImage =
+			string.find(image, "mouselock", 1, true) ~= nil
 			or string.find(image, "shiftlock", 1, true) ~= nil
 			or string.find(image, "mouselockedcursor", 1, true) ~= nil
 			or string.find(image, "403729389", 1, true) ~= nil
 			or string.find(image, "10721394218", 1, true) ~= nil
 			or string.find(image, "12204747365", 1, true) ~= nil
+
+		return isCenterCursorName or isCenterCursorImage
 	end
 
 	local function hideOriginalCenterIndicator(instance)
@@ -8787,6 +8798,21 @@ do
 				end)
 			end
 			_G.__ShiftLockHiddenInstances[instance] = nil
+		end
+	end
+
+	local function enforceOriginalCenterIndicatorHidden()
+		-- Some game roles recreate or re-enable the built-in center graphic
+		-- after Shift Lock is already active. Re-hide only instances previously
+		-- identified as the center cursor; do not rescan the GUI tree per frame.
+		for instance in pairs(_G.__ShiftLockHiddenInstances) do
+			if instance and instance.Parent then
+				pcall(function()
+					if instance.Visible then
+						instance.Visible = false
+					end
+				end)
+			end
 		end
 	end
 
@@ -8910,6 +8936,9 @@ do
 			and _G.CrosshairEnabled == true
 			and isCrosshairCameraModeActive()
 		setShiftLockVisualActive(shouldShow)
+		if shouldShow then
+			enforceOriginalCenterIndicatorHidden()
+		end
 
 		-- setShiftLockVisualActive updates the GUI only when the state changes.
 		-- Avoid writing the same Enabled property again on every rendered frame.
