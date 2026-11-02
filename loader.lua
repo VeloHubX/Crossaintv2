@@ -8299,7 +8299,7 @@ do
 			return nil
 		end
 		
-		-- FIX: If we are the Murderer and holding a knife, DO NOT lock the camera to the Sheriff.
+		-- FIX: If Murderer holds a knife, don't aimlock to Sheriff
 		if v5.Role == "Murderer" then
 			local character = localPlayer.Character
 			if character then
@@ -8339,85 +8339,6 @@ do
 	end
 
 	_G.__AimEnemyHead = aimEnemyHead
-
-	_G.FOV = _G.FOV or 150 -- This fixes the nil crash
-
-	local fovGui = Instance.new("ScreenGui")
-	fovGui.Name = "MarbegFOVCircle"
-	fovGui.ResetOnSpawn = false
-	fovGui.IgnoreGuiInset = true
-	fovGui.DisplayOrder = 10
-	fovGui.Parent = fn2()
-
-	local fovFrame = Instance.new("Frame")
-	fovFrame.Name = "FOVCircle"
-	fovFrame.BackgroundTransparency = 1
-	fovFrame.BorderSizePixel = 0
-	fovFrame.AnchorPoint = Vector2.new(0.5, 0.5)
-	fovFrame.Position = UDim2.fromScale(0.5, 0.5)
-	fovFrame.Size = UDim2.new(0, _G.FOV * 2, 0, _G.FOV * 2)
-	fovFrame.Parent = fovGui
-
-	local fovCorner = Instance.new("UICorner")
-	fovCorner.CornerRadius = UDim.new(1, 0)
-	fovCorner.Parent = fovFrame
-
-	local fovStroke = Instance.new("UIStroke")
-	fovStroke.Thickness = 2
-	fovStroke.Color = Color3.fromRGB(255, 255, 255)
-	fovStroke.Parent = fovFrame
-
-	_G.UpdateFOVCircle = function()
-		fovFrame.Size = UDim2.new(0, _G.FOV * 2, 0, _G.FOV * 2)
-	end
-
-	_G.SetFOVCircleVisible = function(isVisible)
-		fovFrame.Visible = isVisible
-	end
-
-	RunService.RenderStepped:Connect(function()
-		if fovFrame.Visible then
-			fovStroke.Color = Color3.fromHSV(os.clock() * 0.35 % 1, 1, 1)
-		end
-	end)
-
-	_G.XRayEnabled = false
-	local xrayOriginals = setmetatable({}, { __mode = "k" })
-	local xrayConn = nil
-
-	local function processXRayPart(part)
-		if not _G.XRayEnabled or not part or not part.Parent then return end
-		if part:IsA("BasePart") and part.Transparency < 1 and part.Name ~= "Coin_Server" then
-			if xrayOriginals[part] == nil then
-				xrayOriginals[part] = part.LocalTransparencyModifier
-			end
-			part.LocalTransparencyModifier = 0.72
-		end
-	end
-
-	_G.XRaySetEnabled = function(arg)
-		_G.XRayEnabled = arg and true or false
-
-		if not _G.XRayEnabled then
-			for part, original in pairs(xrayOriginals) do
-				if part and part.Parent then
-					part.LocalTransparencyModifier = original
-				end
-			end
-			xrayOriginals = setmetatable({}, { __mode = "k" })
-			if xrayConn then
-				xrayConn:Disconnect()
-				xrayConn = nil
-			end
-			return
-		end
-
-		for _, descendant in ipairs(workspace:GetDescendants()) do
-			processXRayPart(descendant)
-		end
-
-		xrayConn = workspace.DescendantAdded:Connect(processXRayPart)
-	end
 
 	local function fn13()
 		local character = localPlayer.Character
@@ -8729,167 +8650,74 @@ do
 		_G.CrosshairSpinSpeed = math.clamp(tonumber(arg) or 180, 0, 720)
 	end
 
-	RunService:BindToRenderStep("MarbegCrosshair", Enum.RenderPriority.Last.Value, function(arg)
-		if not _G.CrosshairEnabled then
-			return
+	RunService:BindToRenderStep("MarbegCrosshair", Enum.RenderPriority.Last.Value, function(deltaTime)
+		-- 1. ALWAYS hide the native shift lock cursor and GUI, regardless of custom crosshair state
+		local mouse = localPlayer:GetMouse()
+		if mouse and mouse.Icon ~= "" then
+			pcall(function() mouse.Icon = "" end)
 		end
-		local mouseLocation = UserInputService:GetMouseLocation()
-
-		if UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled then
-			local currentCamera = workspace.CurrentCamera
-			mouseLocation = currentCamera and currentCamera.ViewportSize / 2 or mouseLocation
+		if UserInputService.MouseIconEnabled then
+			pcall(function() UserInputService.MouseIconEnabled = false end)
 		end
 
-		frame.Position = UDim2.fromOffset(mouseLocation.X, mouseLocation.Y)
+		local currentCamera = workspace.CurrentCamera
+		if not currentCamera then return end
 
-		if _G.CrosshairSpinEnabled then
-			frame.Rotation = (frame.Rotation + _G.CrosshairSpinSpeed * arg) % 360
+		-- 2. Detect the real Shift Lock state
+		local isShiftLocked = false
+		pcall(function()
+			local settings = UserSettings():GetService("UserGameSettings")
+			isShiftLocked = settings.RotationType == Enum.RotationType.CameraRelative
+		end)
+		
+		-- Fallback detection if settings fail
+		if not isShiftLocked then
+			local head = localPlayer.Character and localPlayer.Character:FindFirstChild("Head")
+			if head and (currentCamera.CFrame.Position - head.Position).Magnitude <= 1.25 then
+				isShiftLocked = true
+			end
+		end
+
+		-- 3. Custom Crosshair logic
+		if _G.CrosshairEnabled then
+			if not _G.CrosshairSpinEnabled then
+				frame.Rotation = 0
+			end
+
+			if isShiftLocked then
+				-- Show Custom Crosshair and follow mouse
+				local mouseLoc = UserInputService:GetMouseLocation()
+				if UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled then
+					mouseLoc = currentCamera.ViewportSize / 2
+				end
+				frame.Position = UDim2.fromOffset(mouseLoc.X, mouseLoc.Y)
+				frame.Visible = true
+
+				if _G.CrosshairSpinEnabled then
+					frame.Rotation = (frame.Rotation + _G.CrosshairSpinSpeed * deltaTime) % 360
+				end
+			else
+				-- Hide Custom Crosshair when not in shift lock
+				frame.Visible = false
+			end
 		else
-			frame.Rotation = 0
+			frame.Visible = false
 		end
 	end)
 
+	-- The MarbegCrosshair render step above already suppresses the native Roblox
+	-- shift-lock cursor on every frame (mouse.Icon = "", MouseIconEnabled = false).
+	-- ShiftLockCrosshairSetEnabled is kept as a stub so existing callers (config
+	-- save/load, unload handler, GUI toggle) do not crash at runtime.
 	_G.HideShiftLockCrosshair = false
-	_G.__ShiftLockHiddenInstances = {}
-	_G.__ShiftLockIconConns = {}
-	_G.__ShiftLockCursorHidden = false
-	_G.__ShiftLockSavedCursorIcon = nil
-	_G.__ShiftLockSavedCursorEnabled = nil
 	_G.__ShiftLockCrosshairRequested = false
 
 	_G.ShiftLockCrosshairSetEnabled = function(arg)
-		local shiftLockHiddenInstances = _G.__ShiftLockHiddenInstances
-
-		for k, shiftLockHiddenInstance in pairs(shiftLockHiddenInstances) do
-			if k and k.Parent then
-				pcall(function()
-					k.Visible = shiftLockHiddenInstance
-				end)
-			end
-
-			shiftLockHiddenInstances[k] = nil
-		end
-
-		for _, shiftLockIconConn in ipairs(_G.__ShiftLockIconConns) do
-			pcall(function()
-				shiftLockIconConn:Disconnect()
-			end)
-		end
-
-		_G.__ShiftLockIconConns = {}
-
-		pcall(function()
-			RunService:UnbindFromRenderStep("MarbegHideShiftLockCursor")
-		end)
-
-		if _G.__ShiftLockCursorHidden then
-			local v5 = localPlayer
-			local mouse
-
-			if localPlayer then
-				mouse = localPlayer:GetMouse()
-			else
-				mouse = v5
-			end
-
-			if mouse then
-				pcall(function()
-					mouse.Icon = _G.__ShiftLockSavedCursorIcon or ""
-				end)
-			end
-
-			if _G.__ShiftLockSavedCursorEnabled ~= nil then
-				pcall(function()
-					UserInputService.MouseIconEnabled = _G.__ShiftLockSavedCursorEnabled
-				end)
-			end
-
-			_G.__ShiftLockCursorHidden = false
-		end
-
 		_G.HideShiftLockCrosshair = arg and true or false
 		_G.__ShiftLockCrosshairRequested = _G.HideShiftLockCrosshair
-		if not _G.HideShiftLockCrosshair or not _G.CrosshairEnabled then
-			return
-		end
-		local v5 = localPlayer
-		local mouse
-
-		if localPlayer then
-			mouse = localPlayer:GetMouse()
-		else
-			mouse = v5
-		end
-
-		_G.__ShiftLockSavedCursorIcon = mouse and mouse.Icon or ""
-		_G.__ShiftLockSavedCursorEnabled = UserInputService.MouseIconEnabled
-		_G.__ShiftLockCursorHidden = true
-
-		local function fn16()
-			if mouse then
-				pcall(function()
-					mouse.Icon = ""
-				end)
-			end
-
-			pcall(function()
-				UserInputService.MouseIconEnabled = false
-			end)
-		end
-
-		fn16()
-		RunService:BindToRenderStep("MarbegHideShiftLockCursor", Enum.RenderPriority.Last.Value + 10, fn16)
-
-		local function fn17(arg2)
-			if not (arg2:IsA("ImageLabel") or arg2:IsA("ImageButton")) then
-				return
-			end
-			local v6 = string.lower(arg2.Name or "")
-			local str = ""
-
-			pcall(function()
-				str = string.lower(arg2.Image or "")
-			end)
-
-			if string.find(v6, "shiftlock", 1, true) or string.find(v6, "mouselock", 1, true) or string.find(v6, "mouse_lock", 1, true) or string.find(v6, "cursorimage", 1, true) or string.find(str, "mouselock", 1, true) or string.find(str, "shiftlock", 1, true) or string.find(str, "mouselockedcursor", 1, true) then
-				shiftLockHiddenInstances[arg2] = arg2.Visible
-				arg2.Visible = false
-			end
-		end
-
-		local tbl6 = {}
-
-		local ok2, result2 = pcall(function()
-			return game:GetService("CoreGui")
-		end)
-
-		if ok2 and result2 then
-			table.insert(tbl6, result2)
-		end
-
-		local playerGui = localPlayer and localPlayer:FindFirstChildOfClass("PlayerGui")
-
-		if playerGui then
-			table.insert(tbl6, playerGui)
-		end
-
-		local ok3, result3 = pcall(fn2)
-
-		if ok3 and result3 then
-			table.insert(tbl6, result3)
-		end
-
-		for _, v6 in ipairs(tbl6) do
-			for _, descendant in ipairs(v6:GetDescendants()) do
-				pcall(fn17, descendant)
-			end
-
-			table.insert(_G.__ShiftLockIconConns, v6.DescendantAdded:Connect(function(descendant)
-				task.defer(function()
-					pcall(fn17, descendant)
-				end)
-			end))
-		end
+		-- Cursor suppression is handled unconditionally by the MarbegCrosshair
+		-- render step above, so no additional work is needed here.
+	end
 	end
 
 	_G.TriggerbotSetDelay = function(arg)
@@ -17170,46 +16998,6 @@ do
 		if _G.CameraSettingsReset then
 			pcall(_G.CameraSettingsReset)
 		end
-
-_G.XRayEnabled = false
-local xrayOriginals = setmetatable({}, { __mode = "k" })
-local xrayConn = nil
-
-local function processXRayPart(part)
-	if not _G.XRayEnabled or not part or not part.Parent then return end
-	if part:IsA("BasePart") and part.Transparency < 1 and part.Name ~= "Coin_Server" then
-		if xrayOriginals[part] == nil then
-			xrayOriginals[part] = part.LocalTransparencyModifier
-		end
-		part.LocalTransparencyModifier = 0.72
-	end
-end
-
-_G.XRaySetEnabled = function(arg)
-	_G.XRayEnabled = arg and true or false
-
-	if not _G.XRayEnabled then
-		for part, original in pairs(xrayOriginals) do
-			if part and part.Parent then
-				part.LocalTransparencyModifier = original
-			end
-		end
-		xrayOriginals = setmetatable({}, { __mode = "k" })
-		if xrayConn then
-			xrayConn:Disconnect()
-			xrayConn = nil
-		end
-		return
-	end
-
-	-- Scan existing map
-	for _, descendant in ipairs(workspace:GetDescendants()) do
-		processXRayPart(descendant)
-	end
-
-	-- Listen for new parts
-	xrayConn = workspace.DescendantAdded:Connect(processXRayPart)
-end
 
 		_G.KnifeAuraEnabled = false
 
