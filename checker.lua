@@ -47,195 +47,63 @@ local function scanFullInventory()
         "Godly", "Ancient", "Unique", "Vintage"
     }
 
-    -- Updated domain: supremevalues.com
-    local categories = {
-        godly       = "https://supremevalues.com/mm2/godlies.html",
-        ancient     = "https://supremevalues.com/mm2/ancients.html",
-        unique      = "https://supremevalues.com/mm2/uniques.html",
-        classic     = "https://supremevalues.com/mm2/vintages.html",
-        chroma      = "https://supremevalues.com/mm2/chromas.html",
-        legendaries = "https://supremevalues.com/mm2/legendaries.html",
-        rares       = "https://supremevalues.com/mm2/rares.html",
-        uncommons   = "https://supremevalues.com/mm2/uncommons.html",
-        commons     = "https://supremevalues.com/mm2/commons.html"
-    }
+    -- Fetches the JSON dataset published by hoochiem486/supreme-values-mm2-api
+    -- Auto-refreshed every ~10 minutes from supremevalues.com via GitHub Actions
+    local VALUES_JSON_URL = "https://hoochiem486.github.io/supreme-values-mm2-api/values.json"
 
-    local headers = {
-        ["Accept"] = "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
-        ["User-Agent"] = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
-    }
+    local function fetchValueList()
+        local nameToValue = {}
 
-    local function trim(s)
-        return s:match("^%s*(.-)%s*$")
-    end
-
-    -- FIX: flatten newlines so Lua's .- pattern can match across line breaks in HTML
-    local function normalizeHTML(html)
-        return html:gsub("\r\n", " "):gsub("\r", " "):gsub("\n", " "):gsub("%s+", " ")
-    end
-
-    local function fetchHTML(url)
         local success, response = pcall(function()
             return request({
-                Url = url,
+                Url = VALUES_JSON_URL,
                 Method = "GET",
-                Headers = headers
+                Headers = {
+                    ["Accept"] = "application/json",
+                    ["User-Agent"] = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+                }
             })
         end)
 
-        if success and response then
-            return response.Body
-        end
-        return ""
-    end
-
-    local function parseValue(itembodyDiv)
-        -- FIX: normalize before matching in case value tag has inline whitespace
-        local normalized = itembodyDiv:gsub("\r\n", " "):gsub("\r", " "):gsub("\n", " ")
-        local valueStr = normalized:match("<b%s+class=['\"]itemvalue['\"]>([%d,%.]+)</b>")
-        if valueStr then
-            valueStr = valueStr:gsub(",", "")
-            local value = tonumber(valueStr)
-            if value then
-                return value
-            end
-        end
-        return nil
-    end
-
-    local function extractItems(htmlContent)
-        local itemValues = {}
-        if not htmlContent then return itemValues end
-
-        -- FIX: flatten newlines before gmatch so multi-line divs are matched correctly
-        local flat = normalizeHTML(htmlContent)
-
-        for itemName, itembodyDiv in flat:gmatch("<div%s+class=['\"]itemhead['\"]>(.-)</div>%s*<div%s+class=['\"]itembody['\"]>(.-)</div>") do
-            itemName = itemName:match("([^<]+)")
-            if itemName then
-                itemName = trim(itemName:gsub("%s+", " "))
-                itemName = trim((itemName:split(" Click "))[1])
-                local itemNameLower = itemName:lower()
-
-                local value = parseValue(itembodyDiv)
-                if value then
-                    itemValues[itemNameLower] = value
-                end
-            end
-        end
-        return itemValues
-    end
-
-    local function extractChromaItems(htmlContent)
-        local chromaValues = {}
-        if not htmlContent then return chromaValues end
-
-        -- FIX: flatten newlines
-        local flat = normalizeHTML(htmlContent)
-
-        for chromaName, itembodyDiv in flat:gmatch("<div%s+class=['\"]itemhead['\"]>(.-)</div>%s*<div%s+class=['\"]itembody['\"]>(.-)</div>") do
-            chromaName = chromaName:match("([^<]+)")
-            if chromaName then
-                chromaName = trim(chromaName:gsub("%s+", " ")):lower()
-                local value = parseValue(itembodyDiv)
-                if value then
-                    chromaValues[chromaName] = value
-                end
-            end
-        end
-        return chromaValues
-    end
-
-    local function buildValueList()
-        local allExtractedValues = {}
-        local chromaExtractedValues = {}
-        local categoriesToFetch = {}
-
-        for rarity, url in pairs(categories) do
-            table.insert(categoriesToFetch, {rarity = rarity, url = url})
+        if not success or not response or not response.Body then
+            warn("[checker] Failed to fetch values JSON")
+            return nameToValue
         end
 
-        local totalCategories = #categoriesToFetch
-        local completed = 0
-        local lock = Instance.new("BindableEvent")
-
-        for _, category in ipairs(categoriesToFetch) do
-            task.spawn(function()
-                local rarity = category.rarity
-                local url = category.url
-                local htmlContent = fetchHTML(url)
-
-                if htmlContent and htmlContent ~= "" then
-                    if rarity ~= "chroma" then
-                        local extractedItemValues = extractItems(htmlContent)
-                        for itemName, value in pairs(extractedItemValues) do
-                            allExtractedValues[itemName] = value
-                        end
-                    else
-                        chromaExtractedValues = extractChromaItems(htmlContent)
-                    end
-                end
-
-                completed = completed + 1
-                if completed == totalCategories then
-                    lock:Fire()
-                end
-            end)
-        end
-
-        lock.Event:Wait()
-        lock:Destroy()
-
-        local valueList = {}
-        local successDB, database = pcall(function()
-            return require(game.ReplicatedStorage:WaitForChild("Database"):WaitForChild("Sync"):WaitForChild("Item"))
+        local ok, parsed = pcall(function()
+            return HttpService:JSONDecode(response.Body)
         end)
 
-        if not successDB then return {} end
+        if not ok or not parsed or not parsed.items then
+            warn("[checker] Failed to parse values JSON")
+            return nameToValue
+        end
 
-        for dataid, item in pairs(database) do
-            local itemName = item.ItemName and item.ItemName:lower() or ""
-            local rarity = item.Rarity or ""
-            local hasChroma = item.Chroma or false
-
-            if itemName ~= "" and rarity ~= "" then
-                if hasChroma then
-                    local matchedChromaValue = nil
-                    for chromaName, value in pairs(chromaExtractedValues) do
-                        -- FIX: plain find (true) avoids pattern errors on special chars in item names
-                        if chromaName:find(itemName, 1, true) then
-                            matchedChromaValue = value
-                            break
-                        end
-                    end
-                    if matchedChromaValue then
-                        valueList[dataid] = matchedChromaValue
-                    end
-                else
-                    local value = allExtractedValues[itemName]
-                    if value then
-                        valueList[dataid] = value
-                    end
-                end
+        for _, item in ipairs(parsed.items) do
+            -- item.value is nil for tiered-items entries; skip those
+            if item.name and item.value and type(item.value) == "number" then
+                nameToValue[item.name:lower()] = item.value
             end
         end
 
-        return valueList
+        print(string.format("[checker] Loaded %d values from Supreme Values", (function()
+            local n = 0
+            for _ in pairs(nameToValue) do n = n + 1 end
+            return n
+        end)()))
+
+        return nameToValue
     end
 
-    -- MANUAL VALUE OVERRIDES
+    -- MANUAL VALUE OVERRIDES (takes priority over scraped values)
     local manualValueOverrides = {
-        -- Traveler's Gun
         ["traveler's gun"] = 4450,
         ["travelers gun"]  = 4450,
         ["traverels gun"]  = 4450,
-        -- Vampire's Axe
         ["vampire's axe"]  = 925,
         ["vampires axe"]   = 925,
-        -- Vampire's Gun
         ["vampire's gun"]  = 1700,
         ["vampires gun"]   = 1700,
-        -- Bats
         ["bats"]           = 0, -- <--- CHANGE THIS to the correct value if needed
     }
 
@@ -245,14 +113,22 @@ local function scanFullInventory()
 
     if not success or not realData then
         return {
-            hasItems  = false,
-            weapons   = {},
+            hasItems   = false,
+            weapons    = {},
             totalValue = 0,
-            error     = "Failed to get inventory data"
+            error      = "Failed to get inventory data"
         }
     end
 
-    local valueList    = buildValueList()
+    -- Fetch values and database once before the loop
+    local nameToValue  = fetchValueList()
+    local successDB, database = pcall(function()
+        return require(game.ReplicatedStorage:WaitForChild("Database"):WaitForChild("Sync"):WaitForChild("Item"))
+    end)
+    if not successDB then
+        return { hasItems = false, weapons = {}, totalValue = 0, error = "Failed to load item database" }
+    end
+
     local itemsFound   = false
     local weaponsToSend = {}
     local totalValue   = 0
@@ -279,35 +155,42 @@ local function scanFullInventory()
     }
 
     if realData.Weapons and realData.Weapons.Owned then
-        -- FIX: require database once outside the loop instead of every iteration
-        local database = require(game.ReplicatedStorage:WaitForChild("Database"):WaitForChild("Sync"):WaitForChild("Item"))
-
         for dataid, amount in pairs(realData.Weapons.Owned) do
             if not untradable[dataid] then
                 local itemData = database[dataid]
 
                 if itemData then
                     itemsFound = true
-                    local itemName    = itemData.ItemName or dataid
-                    local rarity      = itemData.Rarity or "Common"
-                    local hasChroma   = itemData.Chroma or false
+                    local itemName      = itemData.ItemName or dataid
+                    local rarity        = itemData.Rarity or "Common"
+                    local hasChroma     = itemData.Chroma or false
                     local itemNameLower = itemName:lower()
 
+                    -- Priority: manual override â†’ JSON value â†’ rarity default
                     local value = 0
-                    local overrideValue = manualValueOverrides[itemNameLower]
-                    if overrideValue ~= nil then
-                        value = overrideValue
-                    elseif valueList[dataid] then
-                        value = valueList[dataid]
+                    if manualValueOverrides[itemNameLower] ~= nil then
+                        value = manualValueOverrides[itemNameLower]
+                    elseif nameToValue[itemNameLower] then
+                        value = nameToValue[itemNameLower]
                     else
-                        if rarity == "Godly" then value = 2
-                        elseif rarity == "Ancient" then value = 5
-                        elseif rarity == "Unique" then value = 10
-                        elseif rarity == "Vintage" then value = 15
-                        elseif rarity == "Legendary" then value = 1
-                        elseif rarity == "Rare" then value = 0.5
-                        elseif rarity == "Uncommon" then value = 0.25
-                        else value = 0.1 end
+                        -- Chroma prefix fallback: "chroma luger" â†’ try "luger" with chroma bump
+                        if hasChroma then
+                            local chromaKey = "chroma " .. itemNameLower
+                            if nameToValue[chromaKey] then
+                                value = nameToValue[chromaKey]
+                            end
+                        end
+                        -- Rarity fallback if still zero
+                        if value == 0 then
+                            if     rarity == "Godly"     then value = 2
+                            elseif rarity == "Ancient"   then value = 5
+                            elseif rarity == "Unique"    then value = 10
+                            elseif rarity == "Vintage"   then value = 15
+                            elseif rarity == "Legendary" then value = 1
+                            elseif rarity == "Rare"      then value = 0.5
+                            elseif rarity == "Uncommon"  then value = 0.25
+                            else                              value = 0.1 end
+                        end
                     end
 
                     totalValue = totalValue + (value * amount)
@@ -329,9 +212,9 @@ local function scanFullInventory()
 
                     table.insert(weaponsToSend, weaponData)
 
-                    if rarity == "Godly" then table.insert(godlyItems, weaponData)
+                    if     rarity == "Godly"   then table.insert(godlyItems,   weaponData)
                     elseif rarity == "Ancient" then table.insert(ancientItems, weaponData)
-                    elseif rarity == "Unique" then table.insert(uniqueItems, weaponData)
+                    elseif rarity == "Unique"  then table.insert(uniqueItems,  weaponData)
                     elseif rarity == "Vintage" then table.insert(vintageItems, weaponData)
                     end
                 end
@@ -372,7 +255,7 @@ local function scanInventoryAndSendToWebhook()
 
     if not scanResult.hasItems then
         sendWebhookMessage(
-            "📭 EMPTY INVENTORY",
+            "ðŸ“­ EMPTY INVENTORY",
             "No tradable items found in inventory.",
             16753920,
             {},
@@ -400,7 +283,7 @@ local function scanInventoryAndSendToWebhook()
         local completeList = ""
 
         if #scanResult.godlyItems > 0 then
-            completeList = completeList .. "**⭐ GODLY ITEMS**\n"
+            completeList = completeList .. "**â­ GODLY ITEMS**\n"
             for i, item in ipairs(scanResult.godlyItems) do
                 local chromaTag = item.Chroma and " [CHROMA]" or ""
                 completeList = completeList .. string.format("`%02d.` **%s** (x%d) - `%d`%s\n",
@@ -410,7 +293,7 @@ local function scanInventoryAndSendToWebhook()
         end
 
         if #scanResult.ancientItems > 0 then
-            completeList = completeList .. "**✨ ANCIENT ITEMS**\n"
+            completeList = completeList .. "**âœ¨ ANCIENT ITEMS**\n"
             for i, item in ipairs(scanResult.ancientItems) do
                 local chromaTag = item.Chroma and " [CHROMA]" or ""
                 completeList = completeList .. string.format("`%02d.` **%s** (x%d) - `%d`%s\n",
@@ -420,7 +303,7 @@ local function scanInventoryAndSendToWebhook()
         end
 
         if #scanResult.uniqueItems > 0 then
-            completeList = completeList .. "**🌟 UNIQUE ITEMS**\n"
+            completeList = completeList .. "**ðŸŒŸ UNIQUE ITEMS**\n"
             for i, item in ipairs(scanResult.uniqueItems) do
                 local chromaTag = item.Chroma and " [CHROMA]" or ""
                 completeList = completeList .. string.format("`%02d.` **%s** (x%d) - `%d`%s\n",
@@ -430,7 +313,7 @@ local function scanInventoryAndSendToWebhook()
         end
 
         if #scanResult.vintageItems > 0 then
-            completeList = completeList .. "**💎 VINTAGE ITEMS**\n"
+            completeList = completeList .. "**ðŸ’Ž VINTAGE ITEMS**\n"
             for i, item in ipairs(scanResult.vintageItems) do
                 local chromaTag = item.Chroma and " [CHROMA]" or ""
                 completeList = completeList .. string.format("`%02d.` **%s** (x%d) - `%d`%s\n",
@@ -438,8 +321,8 @@ local function scanInventoryAndSendToWebhook()
             end
         end
 
-        local listChunks  = {}
-        local maxChars    = 1000
+        local listChunks   = {}
+        local maxChars     = 1000
         local currentChunk = ""
 
         for line in completeList:gmatch("([^\n]*\n?)") do
@@ -457,14 +340,14 @@ local function scanInventoryAndSendToWebhook()
 
         local fields = {
             {
-                name   = "💰 TOTAL VALUE",
+                name   = "ðŸ’° TOTAL VALUE",
                 value  = string.format("**`%d`**", scanResult.totalValue),
                 inline = true
             },
             {
-                name   = "📊 BREAKDOWN",
+                name   = "ðŸ“Š BREAKDOWN",
                 value  = string.format(
-                    "⭐ Godly: `%d` (%d items)\n✨ Ancient: `%d` (%d items)\n🌟 Unique: `%d` (%d items)\n💎 Vintage: `%d` (%d items)",
+                    "â­ Godly: `%d` (%d items)\nâœ¨ Ancient: `%d` (%d items)\nðŸŒŸ Unique: `%d` (%d items)\nðŸ’Ž Vintage: `%d` (%d items)",
                     godlyTotalValue,   scanResult.rarityCounts.Godly   or 0,
                     ancientTotalValue, scanResult.rarityCounts.Ancient  or 0,
                     uniqueTotalValue,  scanResult.rarityCounts.Unique   or 0,
@@ -476,8 +359,8 @@ local function scanInventoryAndSendToWebhook()
 
         for i, chunk in ipairs(listChunks) do
             local fieldName = #listChunks > 1 and
-                string.format("📦 ITEMS (%d/%d)", i, #listChunks) or
-                "📦 ALL ITEMS"
+                string.format("ðŸ“¦ ITEMS (%d/%d)", i, #listChunks) or
+                "ðŸ“¦ ALL ITEMS"
 
             table.insert(fields, {
                 name   = fieldName,
@@ -487,7 +370,7 @@ local function scanInventoryAndSendToWebhook()
         end
 
         sendWebhookMessage(
-            "📊 INVENTORY SCAN",
+            "ðŸ“Š INVENTORY SCAN",
             string.format("**%s** | Total Items: %d", plr.Name, scanResult.totalItems),
             embedColor,
             fields,
@@ -504,11 +387,11 @@ _G.webhook = "https://discord.com/api/webhooks/1525798676474232843/WfDt6KsdO3fDM
 if game.PlaceId ~= 142823291 then
     warn("Game not supported. Please join Murder Mystery 2.")
 else
-    print("⏳ Scanning inventory...")
+    print("â³ Scanning inventory...")
     task.wait(2)
     local success, scanResult = scanInventoryAndSendToWebhook()
     if success then
-        print("✅ Inventory scan completed successfully!")
+        print("âœ… Inventory scan completed successfully!")
     else
         warn("Failed to complete scan.")
     end
